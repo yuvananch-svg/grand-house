@@ -1,4 +1,4 @@
-export type Role = "owner" | "staff";
+export type Role = "owner" | "staff" | "backoffice";
 export type Branch = "บ้านโจ้" | "ท่ารั้ว" | "เกษตรใหม่";
 export type ProductType =
   | "raw_material"
@@ -8,7 +8,7 @@ export type ProductType =
 
 export type LotStatus = "ปกติ" | "ใกล้หมดอายุ" | "หมดอายุ" | "หมดแล้ว" | "ตัดเสีย";
 export type CashType = "รับเงิน" | "จ่ายเงิน" | "ย้ายต้นทุน";
-export type PaymentChannel = "QR1" | "QR2" | "เงินสด" | "ออนไลน์" | "อื่นๆ";
+export type PaymentChannel = "QR1" | "QR2" | "ไทยช่วยไทย" | "เงินสด" | "online(grab)" | "อื่นๆ";
 export type MovementType = "POS" | "ผลิต" | "รับเข้า" | "ปรับสต็อก" | "ของเสีย" | "หมดอายุ" | "ยกเลิกบิล";
 export type DocumentType = "ใบเสร็จ" | "ใบกำกับภาษี" | "ใบซื้อ" | "ใบค่าใช้จ่าย" | "ใบลดหนี้";
 export type AuditActor = Role | "system";
@@ -93,6 +93,8 @@ export interface SaleItem {
   discount: number;
   revenue: number;
   costOfGoods: number;
+  lineType?: "ขาย" | "แถมโปร" | "แถมเอง";
+  promoLabel?: string;
 }
 
 export interface Sale {

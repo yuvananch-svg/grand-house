@@ -94,7 +94,7 @@ export const initialCashEntries: CashEntry[] = [
 export const initialSales: Sale[] = [
   { id: "SALE-001", documentNo: "RC-202606-0001", date: "2026-06-01", branch: "บ้านโจ้", channel: "QR1", subtotal: 1380, discount: 0, total: 1380, costOfGoods: 500, grossProfit: 880, vatAmount: 0, note: "ยอดขาย demo จาก POS" },
   { id: "SALE-002", documentNo: "RC-202606-0002", date: "2026-06-02", branch: "ท่ารั้ว", channel: "เงินสด", subtotal: 980, discount: 40, total: 940, costOfGoods: 320, grossProfit: 620, vatAmount: 0, note: "ยอดขาย demo จาก POS" },
-  { id: "SALE-003", documentNo: "RC-202606-0003", date: "2026-06-03", branch: "เกษตรใหม่", channel: "ออนไลน์", subtotal: 1518, discount: 0, total: 1518, costOfGoods: 642, grossProfit: 876, vatAmount: 0, note: "ยอดขาย demo จาก POS" },
+  { id: "SALE-003", documentNo: "RC-202606-0003", date: "2026-06-03", branch: "เกษตรใหม่", channel: "online(grab)", subtotal: 1518, discount: 0, total: 1518, costOfGoods: 642, grossProfit: 876, vatAmount: 0, note: "ยอดขาย demo จาก POS" },
 ];
 
 export const initialSaleItems: SaleItem[] = [
@@ -108,7 +108,7 @@ export const initialSaleItems: SaleItem[] = [
 export const initialPayments: Payment[] = [
   { id: "PAY-001", saleId: "SALE-001", date: "2026-06-01", branch: "บ้านโจ้", channel: "QR1", amount: 1380 },
   { id: "PAY-002", saleId: "SALE-002", date: "2026-06-02", branch: "ท่ารั้ว", channel: "เงินสด", amount: 940 },
-  { id: "PAY-003", saleId: "SALE-003", date: "2026-06-03", branch: "เกษตรใหม่", channel: "ออนไลน์", amount: 1518 },
+  { id: "PAY-003", saleId: "SALE-003", date: "2026-06-03", branch: "เกษตรใหม่", channel: "online(grab)", amount: 1518 },
 ];
 
 export const initialMovements: InventoryMovement[] = [

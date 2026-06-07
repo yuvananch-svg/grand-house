@@ -66,7 +66,7 @@ export function maxRows(state: AppState) {
 }
 
 export function channelRows(state: AppState): ChannelRow[] {
-  const channels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "ออนไลน์", "อื่นๆ"];
+  const channels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
   return channels.map((channel) => ({
     name: channel,
     value: state.payments.filter((payment) => payment.channel === channel).reduce((sum, payment) => sum + payment.amount, 0),

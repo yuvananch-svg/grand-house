@@ -15,6 +15,7 @@ import {
   LockKeyhole,
   Minus,
   PackagePlus,
+  Percent,
   Plus,
   RefreshCcw,
   ReceiptText,
@@ -90,35 +91,53 @@ import {
 } from "./reporting";
 import type { AppState, Branch, PaymentChannel, Product, ProductType, Role } from "./types";
 
-type Page = "dashboard" | "pos" | "salesHistory" | "inventory" | "expiry" | "recipes" | "count" | "cash" | "closeShift" | "financial" | "reconcile" | "settings" | "audit";
+type Page =
+  | "dashboard"
+  | "pos"
+  | "dailySales"
+  | "salesHistory"
+  | "inventory"
+  | "grandIssue"
+  | "expiry"
+  | "recipes"
+  | "count"
+  | "cash"
+  | "closeShift"
+  | "financial"
+  | "reconcile"
+  | "settings"
+  | "audit";
 
-const pageItems: { id: Page; label: string; icon: typeof BarChart3; ownerOnly?: boolean }[] = [
-  { id: "dashboard", label: "ภาพรวม", icon: BarChart3 },
-  { id: "pos", label: "ขายหน้าร้าน", icon: CreditCard },
-  { id: "salesHistory", label: "บิลขาย", icon: ReceiptText, ownerOnly: true },
-  { id: "inventory", label: "คลังสินค้า", icon: Boxes },
-  { id: "expiry", label: "แจ้งเตือนหมดอายุ", icon: ShieldAlert },
-  { id: "recipes", label: "สูตรและผลิต", icon: ChefHat },
-  { id: "count", label: "นับสต็อก", icon: ClipboardCheck },
-  { id: "cash", label: "เงินสดและค่าใช้จ่าย", icon: WalletCards },
-  { id: "closeShift", label: "ปิดกะ", icon: FileCheck2 },
-  { id: "financial", label: "งบและภาษี", icon: Download, ownerOnly: true },
-  { id: "reconcile", label: "ตรวจยอดปิดวัน", icon: Calculator, ownerOnly: true },
-  { id: "settings", label: "ตั้งค่า", icon: Settings, ownerOnly: true },
-  { id: "audit", label: "ประวัติระบบ", icon: History, ownerOnly: true },
+const pageItems: { id: Page; label: string; icon: typeof BarChart3; roles?: Role[] }[] = [
+  { id: "dashboard", label: "ภาพรวม", icon: BarChart3, roles: ["owner", "backoffice"] },
+  { id: "pos", label: "ขายหน้าร้าน", icon: CreditCard, roles: ["owner", "staff"] },
+  { id: "dailySales", label: "ยอดขายวันนี้", icon: BarChart3, roles: ["owner", "staff", "backoffice"] },
+  { id: "salesHistory", label: "บิลขาย", icon: ReceiptText, roles: ["owner", "backoffice"] },
+  { id: "inventory", label: "คลัง", icon: Boxes, roles: ["owner", "staff", "backoffice"] },
+  { id: "grandIssue", label: "เบิกจากแกรนด์", icon: Store, roles: ["owner", "staff", "backoffice"] },
+  { id: "expiry", label: "แจ้งเตือนหมดอายุ", icon: ShieldAlert, roles: ["owner", "staff"] },
+  { id: "recipes", label: "สูตร / ต้นทุนเมนู", icon: ChefHat, roles: ["owner", "staff", "backoffice"] },
+  { id: "count", label: "นับสต็อก", icon: ClipboardCheck, roles: ["owner", "staff", "backoffice"] },
+  { id: "cash", label: "เงินสดและค่าใช้จ่าย", icon: WalletCards, roles: ["owner", "backoffice"] },
+  { id: "closeShift", label: "ปิดกะ", icon: FileCheck2, roles: ["owner", "staff"] },
+  { id: "financial", label: "งบและภาษี", icon: Download, roles: ["owner"] },
+  { id: "reconcile", label: "ตรวจยอดปิดวัน", icon: Calculator, roles: ["owner"] },
+  { id: "settings", label: "ตั้งค่า", icon: Settings, roles: ["owner"] },
+  { id: "audit", label: "ประวัติระบบ", icon: History, roles: ["owner"] },
 ];
 
-const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "ออนไลน์", "อื่นๆ"];
+const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
 
 export function App() {
   const [state, setState] = useState<AppState>(() => localRepository.load());
   const [role, setRole] = useState<Role | null>(null);
+  const [currentBranch, setCurrentBranch] = useState<Branch>("บ้านโจ้");
   const [page, setPage] = useState<Page>("dashboard");
   const [toast, setToast] = useState("");
 
   useEffect(() => localRepository.save(state), [state]);
 
-  const visiblePages = useMemo(() => pageItems.filter((item) => role === "owner" || !item.ownerOnly), [role]);
+  const visiblePages = useMemo(() => pageItems.filter((item) => role && (!item.roles || item.roles.includes(role))), [role]);
 
   useEffect(() => {
     if (role && !visiblePages.some((item) => item.id === page)) {
@@ -127,7 +146,15 @@ export function App() {
   }, [page, role, visiblePages]);
 
   if (!role) {
-    return <LoginScreen onLogin={(nextRole) => setRole(nextRole)} />;
+    return (
+      <LoginScreen
+        onLogin={(nextRole, nextBranch) => {
+          setRole(nextRole);
+          setCurrentBranch(nextBranch);
+          setPage(nextRole === "staff" ? "pos" : nextRole === "backoffice" ? "inventory" : "dashboard");
+        }}
+      />
+    );
   }
 
   function commit(next: AppState, message: string) {
@@ -152,15 +179,15 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">GH</div>
+          <GrandHouseMark />
           <div>
             <h1>Grand House</h1>
             <p>ระบบคลังและต้นทุน</p>
           </div>
         </div>
         <div className="role-badge">
-          {role === "owner" ? <UserRound size={18} /> : <Store size={18} />}
-          <span>บทบาท: {role === "owner" ? "เจ้าของ" : "พนักงาน"}</span>
+          {role === "owner" ? <UserRound size={18} /> : role === "backoffice" ? <Boxes size={18} /> : <Store size={18} />}
+          <span>{role === "owner" ? "เจ้าของ" : role === "backoffice" ? "ฝ่ายออฟฟิศ" : "พนักงานสาขา"} · {role === "staff" ? currentBranch : "ทุกสาขา"}</span>
         </div>
         <nav>
           {visiblePages.map((item) => {
@@ -193,9 +220,11 @@ export function App() {
         {toast && <div className={toast.includes("ไม่") || toast.includes("หมดอายุ") ? "toast error" : "toast"}>{toast}</div>}
 
         {page === "dashboard" && <Dashboard state={state} role={role} />}
-        {page === "pos" && <PosPage state={state} commit={commit} fail={fail} />}
+        {page === "pos" && <PosPage state={state} commit={commit} fail={fail} lockedBranch={role === "staff" ? currentBranch : undefined} />}
+        {page === "dailySales" && <DailySalesPage state={state} role={role} currentBranch={currentBranch} />}
         {page === "salesHistory" && <SalesHistoryPage state={state} commit={commit} fail={fail} />}
         {page === "inventory" && <Inventory state={state} commit={commit} fail={fail} />}
+        {page === "grandIssue" && <GrandIssuePage state={state} />}
         {page === "expiry" && <ExpiryCenter state={state} commit={commit} fail={fail} />}
         {page === "recipes" && <Recipes state={state} commit={commit} fail={fail} />}
         {page === "count" && <StockCount state={state} commit={commit} fail={fail} />}
@@ -210,49 +239,89 @@ export function App() {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+function GrandHouseMark({ large = false }: { large?: boolean }) {
+  return (
+    <div className={large ? "brand-mark brand-mark-large" : "brand-mark"} aria-label="Grand House">
+      <svg viewBox="0 0 160 96" role="img" aria-hidden="true">
+        <path className="logo-line" d="M8 61 C24 61 28 47 19 41 C10 34 2 45 9 56 C17 69 37 65 48 52" />
+        <path className="logo-line" d="M48 52 C56 35 72 23 86 18 C101 28 120 45 136 57" />
+        <path className="logo-line" d="M58 48 L85 20 L134 54" />
+        <path className="logo-line" d="M61 48 C64 64 62 72 71 72 L119 72 C127 72 126 60 128 48" />
+        <path className="logo-line" d="M82 72 L82 47 C82 42 86 40 92 40 L100 40 C105 40 108 43 108 48 L108 72" />
+        <path className="logo-line" d="M72 30 L72 12 C72 8 75 7 82 7 C88 7 90 9 90 14 L90 24" />
+        <path className="logo-line" d="M103 52 C103 49 105 47 108 47 C111 47 113 49 113 52 C113 55 111 57 108 57 C105 57 103 55 103 52" />
+        <path className="logo-line" d="M6 73 C37 73 51 73 68 73" />
+        <path className="logo-line" d="M119 73 C132 73 145 73 154 73" />
+      </svg>
+    </div>
+  );
+}
+
+const loginModes: { role: Role; label: string; detail: string; icon: typeof Store }[] = [
+  { role: "staff", label: "พนักงานสาขา", detail: "ขาย เบิก สูตร คลัง นับสต็อก และวันหมดอายุเฉพาะสาขา", icon: Store },
+  { role: "backoffice", label: "ฝ่ายออฟฟิศ", detail: "ดู POS คลัง เบิก สูตร และบันทึกทุกสาขารวมกัน", icon: Boxes },
+  { role: "owner", label: "เจ้าของ", detail: "ดูทุกอย่าง กำไร ภาษี ตั้งค่า และรายงาน", icon: UserRound },
+];
+
+function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => void }) {
   const [selectedRole, setSelectedRole] = useState<Role>("staff");
+  const [selectedBranch, setSelectedBranch] = useState<Branch>("บ้านโจ้");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const expected = selectedRole === "owner" ? "1234" : "1111";
+    const expected = selectedRole === "owner" ? "1234" : selectedRole === "backoffice" ? "2222" : "1111";
     if (pin !== expected) {
       setError("PIN ไม่ถูกต้อง");
       return;
     }
-    onLogin(selectedRole);
+    onLogin(selectedRole, selectedBranch);
   }
 
   return (
     <main className="login-page">
       <section className="login-panel">
-        <div className="brand login-brand">
-          <div className="brand-mark">GH</div>
-          <div>
-            <h1>Grand House</h1>
-            <p>เข้าสู่ระบบ POS และคลังสินค้า</p>
-          </div>
+        <div className="login-logo">
+          <GrandHouseMark large />
+          <h1>Grand House</h1>
+          <p>เลือกระบบที่ต้องการเข้าใช้งาน</p>
         </div>
         <form className="login-form" onSubmit={submit}>
-          <div className="role-switch login-role">
-            <button type="button" className={selectedRole === "staff" ? "active" : ""} onClick={() => setSelectedRole("staff")}>
-              <Store size={18} /> พนักงาน
-            </button>
-            <button type="button" className={selectedRole === "owner" ? "active" : ""} onClick={() => setSelectedRole("owner")}>
-              <UserRound size={18} /> เจ้าของ
-            </button>
+          <div className="login-mode-grid">
+            {loginModes.map((mode) => {
+              const Icon = mode.icon;
+              return (
+                <button key={mode.role} type="button" className={selectedRole === mode.role ? "login-mode active" : "login-mode"} onClick={() => setSelectedRole(mode.role)}>
+                  <Icon size={20} />
+                  <strong>{mode.label}</strong>
+                  <span>{mode.detail}</span>
+                </button>
+              );
+            })}
+          </div>
+          {selectedRole === "staff" && (
+            <div className="branch-pills">
+              {branches.map((branch) => (
+                <button key={branch} type="button" className={selectedBranch === branch ? "branch-pill active" : "branch-pill"} onClick={() => setSelectedBranch(branch)}>
+                  {branch}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="login-context">
+            <span>{selectedRole === "staff" ? `ล็อกสาขา ${selectedBranch}` : "ข้อมูลรวมทุกสาขา"}</span>
+            <span>{selectedRole === "staff" ? "ทำงานประจำวันของสาขา" : selectedRole === "backoffice" ? "ไม่ต้องเลือกสาขา" : "เห็นทุกเมนู"}</span>
           </div>
           <label>
-            <span>PIN</span>
-            <input value={pin} inputMode="numeric" maxLength={6} onChange={(event) => setPin(event.target.value)} placeholder="พนักงาน 1111 / เจ้าของ 1234" />
+            <span>รหัสเข้าใช้งาน</span>
+            <input value={pin} inputMode="numeric" maxLength={6} onChange={(event) => setPin(event.target.value)} placeholder="กรอกรหัสของทางเข้านี้" />
           </label>
           {error && <p className="login-error">{error}</p>}
           <button className="primary action" type="submit">
             <LockKeyhole size={18} /> เข้าสู่ระบบ
           </button>
-          <p className="login-note">PIN นี้ใช้สำหรับ prototype ในเครื่องเท่านั้น ระบบจริงต้องใช้ Supabase Auth และ RLS</p>
+          <p className="login-note">prototype นี้จำลองสิทธิ์แยกทางเข้า ระบบจริงควรใช้บัญชีผู้ใช้แยกคนและ Supabase Auth</p>
         </form>
       </section>
     </main>
@@ -475,130 +544,360 @@ function Dashboard({ state, role }: { state: AppState; role: Role }) {
   );
 }
 
-function PosPage({ state, commit, fail }: { state: AppState; commit: (next: AppState, message: string) => void; fail: (message?: string) => void }) {
+type PosSaleCategory = "อาหาร" | "ของนึ่ง" | "น้ำ" | "ผลไม้";
+type PosLineType = "ขาย" | "แถมโปร";
+type PosCartLine = { id: string; productId: string; quantity: number; unitPrice: number; discount: number; lineType: PosLineType; promoLabel?: string };
+
+const posCategories: PosSaleCategory[] = ["อาหาร", "ของนึ่ง", "น้ำ", "ผลไม้"];
+const promoModes = [
+  { id: "morning", label: "โปร 10:00 ซื้อ 2 แถม 1", paidQty: 2, freeQty: 1 },
+  { id: "afterNoon", label: "โปรหลัง 12:00 ซื้อ 1 แถม 1", paidQty: 1, freeQty: 1 },
+];
+
+function posCategory(product: Product): PosSaleCategory {
+  if (product.category.includes("ผลไม้") || product.name.includes("ผลไม้")) return "ผลไม้";
+  if (product.category.includes("น้ำ") || product.name.includes("น้ำ")) return "น้ำ";
+  if (product.category.includes("ขนม") || product.name.includes("ขนมถ้วย")) return "ของนึ่ง";
+  return "อาหาร";
+}
+
+function emptyPayments(): Record<PaymentChannel, number> {
+  return { QR1: 0, QR2: 0, ไทยช่วยไทย: 0, เงินสด: 0, "online(grab)": 0, อื่นๆ: 0 };
+}
+
+function PosPage({
+  state,
+  commit,
+  fail,
+  lockedBranch,
+}: {
+  state: AppState;
+  commit: (next: AppState, message: string) => void;
+  fail: (message?: string) => void;
+  lockedBranch?: Branch;
+}) {
   const saleProducts = state.products.filter((product) => product.active && (product.type === "purchased_finished_good" || product.type === "produced_finished_good"));
-  const [cart, setCart] = useState<Array<{ productId: string; quantity: number; unitPrice: number; discount: number }>>([]);
-  const [paymentAmounts, setPaymentAmounts] = useState<Record<PaymentChannel, number>>({ QR1: 0, QR2: 0, เงินสด: 0, ออนไลน์: 0, อื่นๆ: 0 });
+  const [activeCategory, setActiveCategory] = useState<PosSaleCategory>("อาหาร");
+  const [date, setDate] = useState(today);
+  const [branch, setBranch] = useState<Branch>(lockedBranch || "บ้านโจ้");
+  const [note, setNote] = useState("ขายหน้าร้าน");
+  const [cart, setCart] = useState<PosCartLine[]>([]);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentChannel>("QR1");
+  const [receivedAmount, setReceivedAmount] = useState(0);
+  const [paymentAmounts, setPaymentAmounts] = useState<Record<PaymentChannel, number>>(emptyPayments());
   const [paymentTouched, setPaymentTouched] = useState(false);
+  const [promoId, setPromoId] = useState(promoModes[0].id);
+  const [paidProductId, setPaidProductId] = useState(saleProducts[0]?.id || "");
+  const [freeProductId, setFreeProductId] = useState(saleProducts[0]?.id || "");
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice - item.discount, 0), [cart]);
   const paidTotal = useMemo(() => paymentChannels.reduce((sum, channel) => sum + paymentAmounts[channel], 0), [paymentAmounts]);
   const paymentDiff = paidTotal - cartTotal;
+  const visibleProducts = saleProducts.filter((product) => posCategory(product) === activeCategory);
+
+  useEffect(() => {
+    if (lockedBranch) setBranch(lockedBranch);
+  }, [lockedBranch]);
+
+  useEffect(() => {
+    if (saleProducts.length > 0) {
+      setPaidProductId((current) => current || saleProducts[0].id);
+      setFreeProductId((current) => current || saleProducts[0].id);
+    }
+  }, [saleProducts]);
 
   useEffect(() => {
     if (!paymentTouched) {
-      setPaymentAmounts({ QR1: cartTotal, QR2: 0, เงินสด: 0, ออนไลน์: 0, อื่นๆ: 0 });
+      const next = emptyPayments();
+      next[selectedPayment] = cartTotal;
+      setReceivedAmount(cartTotal);
+      setPaymentAmounts(next);
     }
-  }, [cartTotal, paymentTouched]);
+  }, [cartTotal, paymentTouched, selectedPayment]);
+
+  function availableFor(productId: string) {
+    return activeLots(state, (lot) => lot.productId === productId && lot.branch === branch && lotStatus(lot) !== "หมดอายุ").reduce((sum, lot) => sum + lot.remaining, 0);
+  }
 
   function addProduct(product: Product) {
-    const available = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ").reduce((sum, lot) => sum + lot.remaining, 0);
-    if (available <= 0) return fail(`${product.name} ไม่มีสต็อกที่ขายได้`);
+    const available = availableFor(product.id);
+    if (available <= 0) return fail(`${product.name} ไม่มีสต็อกที่ขายได้ในสาขา ${branch}`);
     setCart((items) => {
-      const current = items.find((item) => item.productId === product.id);
-      if (current) return items.map((item) => (item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item));
-      return [...items, { productId: product.id, quantity: 1, unitPrice: product.salePrice || 0, discount: 0 }];
+      const current = items.find((item) => item.productId === product.id && item.lineType === "ขาย" && !item.promoLabel);
+      if (current) return items.map((item) => (item.id === current.id ? { ...item, quantity: item.quantity + 1 } : item));
+      return [...items, { id: crypto.randomUUID(), productId: product.id, quantity: 1, unitPrice: product.salePrice || 0, discount: 0, lineType: "ขาย" }];
     });
   }
 
-  function updateCart(productId: string, key: "quantity" | "unitPrice" | "discount", value: number) {
-    setCart((items) => items.map((item) => (item.productId === productId ? { ...item, [key]: Math.max(0, value) } : item)).filter((item) => item.quantity > 0));
+  function addPromo() {
+    const mode = promoModes.find((item) => item.id === promoId) || promoModes[0];
+    const paidProduct = productById(state.products, paidProductId);
+    const freeProduct = productById(state.products, freeProductId);
+    if (!paidProduct || !freeProduct) return fail("กรุณาเลือกสินค้าขายและสินค้าแถม");
+    const requiredByProduct = new Map<string, number>();
+    requiredByProduct.set(paidProduct.id, (requiredByProduct.get(paidProduct.id) || 0) + mode.paidQty);
+    requiredByProduct.set(freeProduct.id, (requiredByProduct.get(freeProduct.id) || 0) + mode.freeQty);
+    for (const [productId, qty] of requiredByProduct) {
+      const product = productById(state.products, productId);
+      if (availableFor(productId) < qty) return fail(`${product?.name || productId} มีสต็อกไม่พอสำหรับโปรนี้`);
+    }
+    setCart((items) => [
+      ...items,
+      { id: crypto.randomUUID(), productId: paidProduct.id, quantity: mode.paidQty, unitPrice: paidProduct.salePrice || 0, discount: 0, lineType: "ขาย", promoLabel: mode.label },
+      { id: crypto.randomUUID(), productId: freeProduct.id, quantity: mode.freeQty, unitPrice: 0, discount: 0, lineType: "แถมโปร", promoLabel: mode.label },
+    ]);
   }
 
-  function useQuickPayment(channel: PaymentChannel) {
-    setPaymentTouched(true);
-    setPaymentAmounts({ QR1: 0, QR2: 0, เงินสด: 0, ออนไลน์: 0, อื่นๆ: 0, [channel]: cartTotal });
+  function updateCart(lineId: string, key: "quantity" | "unitPrice" | "discount", value: number) {
+    setCart((items) => items.map((item) => (item.id === lineId ? { ...item, [key]: Math.max(0, value) } : item)).filter((item) => item.quantity > 0));
   }
 
-  function updatePayment(channel: PaymentChannel, value: number) {
+  function removeCartLine(lineId: string) {
+    setCart((items) => items.filter((item) => item.id !== lineId));
+  }
+
+  function choosePayment(channel: PaymentChannel, amount = receivedAmount || cartTotal) {
     setPaymentTouched(true);
-    setPaymentAmounts((current) => ({ ...current, [channel]: Math.max(0, value) }));
+    setSelectedPayment(channel);
+    setReceivedAmount(amount);
+    const next = emptyPayments();
+    next[channel] = Math.max(0, amount);
+    setPaymentAmounts(next);
+  }
+
+  function updateReceived(value: number) {
+    const amount = Math.max(0, value);
+    setPaymentTouched(true);
+    setReceivedAmount(amount);
+    const next = emptyPayments();
+    next[selectedPayment] = amount;
+    setPaymentAmounts(next);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     const result = createPosSale(state, {
-      date: String(form.get("date")),
-      branch: form.get("branch") as Branch,
+      date,
+      branch,
       payments: paymentAmounts,
       items: cart,
-      note: String(form.get("note")),
+      note,
     });
     if (result.error) return fail(result.error);
     setCart([]);
-    setPaymentAmounts({ QR1: 0, QR2: 0, เงินสด: 0, ออนไลน์: 0, อื่นๆ: 0 });
+    setPaymentAmounts(emptyPayments());
+    setReceivedAmount(0);
     setPaymentTouched(false);
     commit(result.state, "บันทึกบิล POS แล้ว");
   }
 
   return (
     <section className="pos-layout">
-      <Panel title="เลือกสินค้า" icon={Store}>
-        <div className="product-grid">
-          {saleProducts.map((product) => {
-            const available = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ").reduce((sum, lot) => sum + lot.remaining, 0);
+      <Panel title="สินค้าทั้งหมด" icon={Store}>
+        <div className="filter-row">
+          {posCategories.map((category) => (
+            <button key={category} className={activeCategory === category ? "chip active" : "chip"} onClick={() => setActiveCategory(category)}>
+              {category}
+            </button>
+          ))}
+        </div>
+        <div className="product-grid pos-product-grid">
+          {visibleProducts.map((product) => {
+            const available = availableFor(product.id);
             return (
               <button className="product-button" key={product.id} onClick={() => addProduct(product)}>
                 <strong>{product.name}</strong>
-                <span>{money(product.salePrice || 0)} · เหลือ {number(available, 2)}</span>
+                <span>{money(product.salePrice || 0)} · เหลือ {number(available, 2)} {product.unit}</span>
               </button>
             );
           })}
+          {visibleProducts.length === 0 && <div className="empty-box">ยังไม่มีสินค้าในหมวด {activeCategory}</div>}
         </div>
       </Panel>
-      <Panel title="ตะกร้าขายหน้าร้าน" icon={CreditCard}>
+      <Panel title="รายการขายและโปรโมชัน" icon={CreditCard}>
         <form className="stack" onSubmit={submit}>
           <div className="clean-form pos-meta">
-            <Input name="date" label="วันที่ขาย" type="date" defaultValue={today} />
-            <Select name="branch" label="สาขา" options={branches.map((branch) => [branch, branch])} />
-            <Input name="note" label="หมายเหตุ" defaultValue="ขายหน้าร้าน" />
+            <Input name="date" label="วันที่ขาย" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <Select name="branch" label="สาขา" value={branch} disabled={Boolean(lockedBranch)} onChange={(event) => setBranch(event.target.value as Branch)} options={branches.map((item) => [item, item])} />
+            <Input name="note" label="หมายเหตุ" value={note} onChange={(event) => setNote(event.target.value)} />
+          </div>
+          <div className="promo-box">
+            <div className="payment-header">
+              <strong><Percent size={18} /> สินค้าโปร</strong>
+              <span>เลือกสินค้าที่ขายได้ และตัวที่แถม</span>
+            </div>
+            <div className="clean-form promo-form">
+              <Select name="promo" label="ช่วงโปร" value={promoId} onChange={(event) => setPromoId(event.target.value)} options={promoModes.map((item) => [item.id, item.label])} />
+              <Select name="paidProduct" label="สินค้าที่ลูกค้าซื้อ" value={paidProductId} onChange={(event) => setPaidProductId(event.target.value)} options={saleProducts.map((product) => [product.id, product.name])} />
+              <Select name="freeProduct" label="สินค้าที่แถม" value={freeProductId} onChange={(event) => setFreeProductId(event.target.value)} options={saleProducts.map((product) => [product.id, product.name])} />
+              <button className="secondary action" type="button" onClick={addPromo}>
+                <Plus size={18} /> เพิ่มโปรลงบิล
+              </button>
+            </div>
           </div>
           <SimpleTable
-            headers={["สินค้า", "จำนวน", "ราคา", "ส่วนลด", "รวม"]}
+            headers={["ประเภท", "สินค้า", "โปร", "จำนวน", "ราคา", "ส่วนลด", "รวม", "ลบ"]}
             rows={cart.map((item) => {
               const product = productById(state.products, item.productId);
               return [
+                <Badge key={`${item.id}-type`} status={item.lineType} />,
                 product?.name || item.productId,
-                <input key="qty" className="mini-input" type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateCart(item.productId, "quantity", Number(event.target.value))} />,
-                <input key="price" className="mini-input" type="number" min="0" step="1" value={item.unitPrice} onChange={(event) => updateCart(item.productId, "unitPrice", Number(event.target.value))} />,
-                <input key="discount" className="mini-input" type="number" min="0" step="1" value={item.discount} onChange={(event) => updateCart(item.productId, "discount", Number(event.target.value))} />,
+                item.promoLabel || "-",
+                <input key="qty" className="mini-input" type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateCart(item.id, "quantity", Number(event.target.value))} />,
+                <input key="price" className="mini-input" type="number" min="0" step="1" value={item.unitPrice} onChange={(event) => updateCart(item.id, "unitPrice", Number(event.target.value))} />,
+                <input key="discount" className="mini-input" type="number" min="0" step="1" value={item.discount} onChange={(event) => updateCart(item.id, "discount", Number(event.target.value))} />,
                 money(item.quantity * item.unitPrice - item.discount),
+                <button key="remove" className="small-danger" type="button" onClick={() => removeCartLine(item.id)}>ลบ</button>,
               ];
             })}
-            empty="ยังไม่มีสินค้าในตะกร้า"
+            empty="ยังไม่มีรายการในบิล"
           />
           <div className="pos-total">
-            <span>ยอดรวม</span>
+            <span>ยอดที่ต้องรับ</span>
             <strong>{money(cartTotal)}</strong>
           </div>
           <div className="payment-box">
             <div className="payment-header">
-              <strong>รับเงิน</strong>
+              <strong>รับชำระ</strong>
               <span className={Math.abs(paymentDiff) <= 0.01 ? "good-text" : "danger-text"}>ส่วนต่าง {money(paymentDiff)}</span>
             </div>
-            <div className="quick-pay-row">
-              {paymentChannels.map((channel) => (
-                <button key={channel} className="chip" type="button" onClick={() => useQuickPayment(channel)}>
-                  ทั้งหมด {channel}
-                </button>
-              ))}
-            </div>
-            <div className="payment-grid">
-              {paymentChannels.map((channel) => (
-                <label key={channel}>
-                  <span>{channel}</span>
-                  <input type="number" min="0" step="0.01" value={paymentAmounts[channel]} onChange={(event) => updatePayment(channel, Number(event.target.value))} />
-                </label>
-              ))}
+            <div className="payment-entry">
+              <Input name="receivedAmount" label="จำนวนเงินที่ลูกค้าชำระ" type="number" step="0.01" value={receivedAmount} onChange={(event) => updateReceived(Number(event.target.value))} />
+              <div className="payment-channel-row">
+                {paymentChannels.map((channel) => (
+                  <button key={channel} className={selectedPayment === channel ? "chip active" : "chip"} type="button" onClick={() => choosePayment(channel)}>
+                    {channel}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <button className="primary action" type="submit">
-            <Save size={18} /> บันทึกบิล POS
+            <Save size={18} /> บันทึกบิล
           </button>
         </form>
       </Panel>
     </section>
   );
+}
+
+function DailySalesPage({ state, role, currentBranch }: { state: AppState; role: Role; currentBranch: Branch }) {
+  const [date, setDate] = useState(today);
+  const [branchFilter, setBranchFilter] = useState<Branch | "all">(role === "staff" ? currentBranch : "all");
+  const targetBranch = role === "staff" ? currentBranch : branchFilter;
+  const branchMatches = (branch: Branch) => targetBranch === "all" || branch === targetBranch;
+  const sales = state.sales.filter((sale) => sale.date === date && branchMatches(sale.branch) && sale.status !== "ยกเลิก");
+  const saleIds = new Set(sales.map((sale) => sale.id));
+  const items = state.saleItems.filter((item) => saleIds.has(item.saleId));
+  const soldItems = items.filter((item) => item.lineType ? item.lineType === "ขาย" : item.revenue > 0);
+  const freeItems = items.filter((item) => item.lineType ? item.lineType !== "ขาย" : item.revenue <= 0);
+  const paymentRows = paymentChannels.map((channel) => ({
+    channel,
+    amount: state.payments.filter((payment) => payment.date === date && branchMatches(payment.branch) && payment.channel === channel).reduce((sum, payment) => sum + payment.amount, 0),
+  }));
+  const totalSales = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalCost = sales.reduce((sum, sale) => sum + sale.costOfGoods, 0);
+  const freeCost = freeItems.reduce((sum, item) => sum + item.costOfGoods, 0);
+  const grossProfit = totalSales - totalCost;
+  const soldRows = summarizeSaleItems(soldItems, state);
+  const freeRows = summarizeSaleItems(freeItems, state, true);
+  const wasteQty = state.sessions.filter((session) => session.date === date && branchMatches(session.branch)).reduce((sum, session) => sum + session.wasteQty, 0);
+  const expiring = expiryAlerts(state).filter((item) => branchMatches(item.lot.branch));
+
+  return (
+    <section className="stack">
+      <div className="daily-hero">
+        <div>
+          <p className="section-kicker">Front Store Pulse</p>
+          <h3>ยอดขายประจำวัน</h3>
+          <p>สรุปยอดขาย สินค้าแถม และของที่ต้องจัดการของ{targetBranch === "all" ? "ทุกสาขา" : `สาขา${targetBranch}`}</p>
+        </div>
+        <div className="daily-filters">
+          <Input name="dailyDate" label="วันที่" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          {role === "owner" ? (
+            <Select
+              name="dailyBranch"
+              label="สาขา"
+              value={branchFilter}
+              onChange={(event) => setBranchFilter(event.target.value as Branch | "all")}
+              options={[["all", "ทุกสาขา"], ...branches.map((branch) => [branch, branch] as [string, string])]}
+            />
+          ) : (
+            <Select name="dailyBranch" label="สาขา" value={currentBranch} disabled options={branches.map((branch) => [branch, branch])} />
+          )}
+        </div>
+      </div>
+      <div className="metric-grid premium-metrics">
+        <Metric label="ยอดขายวันนี้" value={money(totalSales)} intent={totalSales > 0 ? "good" : undefined} />
+        <Metric label="จำนวนบิล" value={`${number(sales.length)} บิล`} />
+        <Metric label="กำไรขั้นต้น" value={money(grossProfit)} intent={grossProfit < 0 ? "danger" : "good"} />
+        <Metric label="ต้นทุนของแถม" value={money(freeCost)} intent={freeCost > 0 ? "danger" : undefined} />
+        <Metric label="รายการแถม" value={`${number(freeItems.reduce((sum, item) => sum + item.quantity, 0), 2)} ชิ้น`} />
+        <Metric label="เสีย/ทิ้งวันนี้" value={`${number(wasteQty, 2)} ชิ้น`} intent={wasteQty > 0 ? "danger" : undefined} />
+      </div>
+      <div className="daily-grid">
+        <Panel title="ยอดรับเงินแยกช่องทาง" icon={CreditCard}>
+          <SimpleTable headers={["ช่องทาง", "ยอดรับ"]} rows={paymentRows.map((row) => [row.channel, money(row.amount)])} />
+        </Panel>
+        <ChartPanel title="สินค้าขายดีวันนี้" icon={BarChart3}>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={soldRows.slice(0, 6)} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis type="category" dataKey="name" width={130} />
+              <Tooltip formatter={(value) => money(Number(value))} />
+              <Bar dataKey="revenue" name="ยอดขาย" fill="#b5121b" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+      </div>
+      <div className="two-col">
+        <Panel title="สินค้าที่ขายได้วันนี้" icon={Store}>
+          <SimpleTable
+            headers={["สินค้า", "จำนวนขาย", "รายได้", "ต้นทุน", "กำไร"]}
+            rows={soldRows.map((row) => [row.name, number(row.quantity, 2), money(row.revenue), money(row.cost), money(row.revenue - row.cost)])}
+            empty="ยังไม่มีรายการขายวันนี้"
+          />
+        </Panel>
+        <Panel title="สินค้าที่แถมวันนี้" icon={Percent}>
+          <SimpleTable
+            headers={["สินค้า", "จำนวนแถม", "โปร/ที่มา", "ต้นทุนของแถม"]}
+            rows={freeRows.map((row) => [row.name, number(row.quantity, 2), row.promoLabel || "แถม", money(row.cost)])}
+            empty="ยังไม่มีรายการแถมวันนี้"
+          />
+        </Panel>
+      </div>
+      <Panel title="แจ้งเตือนสต็อกของสาขา" icon={ShieldAlert}>
+        <SimpleTable
+          headers={["สินค้า", "LOT", "สาขา", "หมดอายุ", "เหลือ", "สถานะ"]}
+          rows={expiring.slice(0, 8).map((item) => [
+            item.product.name,
+            item.lot.id,
+            item.lot.branch,
+            item.lot.expiryDate,
+            `${number(item.lot.remaining, 2)} ${item.product.unit}`,
+            <Badge key={item.lot.id} status={item.status} />,
+          ])}
+          empty="ยังไม่มีรายการใกล้หมดอายุในสาขานี้"
+        />
+      </Panel>
+    </section>
+  );
+}
+
+function summarizeSaleItems(items: AppState["saleItems"], state: AppState, includePromo = false) {
+  const rows = new Map<string, { name: string; quantity: number; revenue: number; cost: number; promoLabel?: string }>();
+  for (const item of items) {
+    const product = productById(state.products, item.productId);
+    const current = rows.get(item.productId) || { name: product?.name || item.productId, quantity: 0, revenue: 0, cost: 0, promoLabel: includePromo ? item.promoLabel : undefined };
+    current.quantity += item.quantity;
+    current.revenue += item.revenue;
+    current.cost += item.costOfGoods;
+    if (includePromo && item.promoLabel && !current.promoLabel?.includes(item.promoLabel)) {
+      current.promoLabel = current.promoLabel ? `${current.promoLabel}, ${item.promoLabel}` : item.promoLabel;
+    }
+    rows.set(item.productId, current);
+  }
+  return [...rows.values()].sort((a, b) => (includePromo ? b.cost - a.cost : b.revenue - a.revenue));
 }
 
 function SalesHistoryPage({ state, commit, fail }: { state: AppState; commit: (next: AppState, message: string) => void; fail: (message?: string) => void }) {
@@ -808,6 +1107,67 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
           ))}
         </div>
         <LotsTable state={state} lots={visibleLots} />
+      </Panel>
+    </section>
+  );
+}
+
+function GrandIssuePage({ state }: { state: AppState }) {
+  const grandLots = state.lots.filter((lot) => {
+    const product = productById(state.products, lot.productId);
+    return product?.supplier === "The Grand's" || lot.supplier === "The Grand's";
+  });
+  const grandProducts = state.products.filter((product) => product.supplier === "The Grand's");
+
+  return (
+    <section className="stack">
+      <Panel title="รายการสินค้าจากแกรนด์" icon={Store}>
+        <SimpleTable
+          headers={["รหัส", "สินค้า", "หมวด", "ราคาขาย", "สถานะ"]}
+          rows={grandProducts.map((product) => [
+            product.id,
+            product.name,
+            product.category,
+            product.salePrice ? money(product.salePrice) : "-",
+            <Badge key={product.id} status={product.active ? "ปกติ" : "ปิดใช้งาน"} />,
+          ])}
+          empty="ยังไม่มีสินค้าจากแกรนด์"
+        />
+      </Panel>
+      <Panel title="สรุปเบิก ขาย แถม เสีย เหลือ แยก LOT" icon={ClipboardCheck}>
+        <SimpleTable
+          headers={["สินค้า", "LOT", "สาขา", "เบิกมา", "ขาย", "แถม", "เสีย/ทิ้ง", "เหลือ", "ต้นทุนขาย", "รายได้", "กำไร"]}
+          rows={grandLots.map((lot) => {
+            const product = productById(state.products, lot.productId);
+            const saleRows = state.saleItems.filter((item) => item.lotId === lot.id);
+            const soldQty = saleRows.filter((item) => item.revenue > 0).reduce((sum, item) => sum + item.quantity, 0);
+            const freeQty = saleRows.filter((item) => item.revenue <= 0).reduce((sum, item) => sum + item.quantity, 0);
+            const wasteQty =
+              state.sessions.filter((session) => session.lotId === lot.id).reduce((sum, session) => sum + session.wasteQty, 0) +
+              Math.abs(state.adjustments.filter((adjustment) => adjustment.lotId === lot.id && adjustment.quantityChange < 0).reduce((sum, adjustment) => sum + adjustment.quantityChange, 0));
+            const revenue = saleRows.reduce((sum, item) => sum + item.revenue, 0);
+            const cost = saleRows.reduce((sum, item) => sum + item.costOfGoods, 0);
+            return [
+              product?.name || lot.productId,
+              lot.id,
+              lot.branch,
+              `${number(lot.quantityIn, 2)} ${product?.unit || ""}`,
+              number(soldQty, 2),
+              number(freeQty, 2),
+              number(wasteQty, 2),
+              `${number(lot.remaining, 2)} ${product?.unit || ""}`,
+              money(cost),
+              money(revenue),
+              money(revenue - cost),
+            ];
+          })}
+          empty="ยังไม่มี LOT ที่เบิกจากแกรนด์"
+        />
+      </Panel>
+      <Panel title="แนวทางปิดยอดรายวัน" icon={FileCheck2}>
+        <p className="plain-text">
+          สูตรตรวจยอดคือ เบิกมา = ขาย + แถม + เสีย/ทิ้ง + เหลือ/คืนแกรนด์ ถ้าตัวเลขไม่เท่ากันต้องตรวจบิล โปร และการนับของเหลือก่อนปิดวัน
+        </p>
       </Panel>
     </section>
   );
@@ -1046,7 +1406,7 @@ function CashPage({ state, commit }: { state: AppState; commit: (next: AppState,
 }
 
 function CloseShiftPage({ state, commit }: { state: AppState; commit: (next: AppState, message: string) => void }) {
-  const channels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "ออนไลน์", "อื่นๆ"];
+  const channels: PaymentChannel[] = paymentChannels;
   const [date, setDate] = useState(today);
   const [branch, setBranch] = useState<Branch>("บ้านโจ้");
   const expectedByChannel = channels.map((channel) => ({

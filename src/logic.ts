@@ -24,6 +24,7 @@ import type {
 
 const STORAGE_KEY = "grand-house-prototype-state-v1";
 export const today = "2026-06-03";
+const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
 
 export function loadState(): AppState {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -36,6 +37,13 @@ export function loadState(): AppState {
 }
 
 function normalizeState(state: Partial<AppState>): AppState {
+  const sales = (state.sales || []).map((sale) => ({ ...sale, channel: normalizePaymentChannel(sale.channel) }));
+  const payments = (state.payments || []).map((payment) => ({ ...payment, channel: normalizePaymentChannel(payment.channel) }));
+  const closeShifts = (state.closeShifts || []).map((shift) => ({
+    ...shift,
+    expectedByChannel: normalizePaymentRecord(shift.expectedByChannel),
+    actualByChannel: normalizePaymentRecord(shift.actualByChannel),
+  }));
   return {
     ...initialState,
     ...state,
@@ -44,17 +52,31 @@ function normalizeState(state: Partial<AppState>): AppState {
     recipes: state.recipes || initialState.recipes,
     batches: state.batches || [],
     sessions: state.sessions || [],
-    sales: state.sales || [],
+    sales,
     saleItems: state.saleItems || [],
-    payments: state.payments || [],
+    payments,
     movements: state.movements || [],
     documents: state.documents || [],
     cashEntries: state.cashEntries || [],
     adjustments: state.adjustments || [],
-    closeShifts: state.closeShifts || [],
+    closeShifts,
     auditLogs: state.auditLogs || [],
     taxSettings: state.taxSettings || initialState.taxSettings,
   };
+}
+
+function normalizePaymentChannel(channel: unknown): PaymentChannel {
+  if (channel === "ออนไลน์") return "online(grab)";
+  return paymentChannels.includes(channel as PaymentChannel) ? (channel as PaymentChannel) : "อื่นๆ";
+}
+
+function normalizePaymentRecord(record?: Partial<Record<PaymentChannel | "ออนไลน์", number>>): Record<PaymentChannel, number> {
+  const normalized = paymentChannels.reduce((acc, channel) => ({ ...acc, [channel]: 0 }), {} as Record<PaymentChannel, number>);
+  if (!record) return normalized;
+  for (const [channel, amount] of Object.entries(record)) {
+    normalized[normalizePaymentChannel(channel)] += Number(amount) || 0;
+  }
+  return normalized;
 }
 
 export function saveState(state: AppState) {
@@ -554,6 +576,8 @@ export interface PosCartInput {
   quantity: number;
   unitPrice: number;
   discount: number;
+  lineType?: "ขาย" | "แถมโปร" | "แถมเอง";
+  promoLabel?: string;
 }
 
 export type PosPaymentInput = Partial<Record<PaymentChannel, number>>;
@@ -605,6 +629,8 @@ export function createPosSale(
         discount: lineDiscount,
         revenue: lineRevenue,
         costOfGoods: lineCost,
+        lineType: cartItem.lineType || (lineRevenue <= 0 ? "แถมโปร" : "ขาย"),
+        promoLabel: cartItem.promoLabel,
       });
       movements.push({
         id: nextId("MOVE", [...state.movements, ...movements]),
@@ -689,9 +715,8 @@ function buildPosPayments(
   state: AppState,
   input: { saleId: string; date: string; branch: Branch; channel?: PaymentChannel; payments?: PosPaymentInput; total: number },
 ): { payments: Payment[]; primaryChannel: PaymentChannel; paymentSummary: string; error?: string } {
-  const channels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "ออนไลน์", "อื่นๆ"];
   const rawPayments = input.payments || (input.channel ? { [input.channel]: input.total } : {});
-  const paidRows = channels
+  const paidRows = paymentChannels
     .map((channel) => ({ channel, amount: Number(rawPayments[channel]) || 0 }))
     .filter((row) => row.amount > 0);
   if (paidRows.length === 0) return { payments: [], primaryChannel: "อื่นๆ", paymentSummary: "-", error: "กรุณากรอกยอดรับเงินอย่างน้อย 1 ช่องทาง" };
@@ -720,8 +745,7 @@ export function closeShift(
   state: AppState,
   input: { date: string; branch: Branch; actualByChannel: Record<PaymentChannel, number>; note: string },
 ): AppState {
-  const channels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "ออนไลน์", "อื่นๆ"];
-  const expectedByChannel = channels.reduce(
+  const expectedByChannel = paymentChannels.reduce(
     (acc, channel) => ({
       ...acc,
       [channel]: state.payments
@@ -731,8 +755,8 @@ export function closeShift(
     {} as Record<PaymentChannel, number>,
   );
   const sales = activeSales(state).filter((sale) => sale.date === input.date && sale.branch === input.branch);
-  const expectedTotal = channels.reduce((sum, channel) => sum + expectedByChannel[channel], 0);
-  const actualTotal = channels.reduce((sum, channel) => sum + input.actualByChannel[channel], 0);
+  const expectedTotal = paymentChannels.reduce((sum, channel) => sum + expectedByChannel[channel], 0);
+  const actualTotal = paymentChannels.reduce((sum, channel) => sum + input.actualByChannel[channel], 0);
   const salesTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
   const costOfGoods = sales.reduce((sum, sale) => sum + sale.costOfGoods, 0);
   const shift: CloseShift = {

@@ -64,7 +64,7 @@ create table if not exists public.sales (
   document_no text not null unique,
   sale_date date not null,
   branch_id text not null references public.branches(id),
-  channel text not null check (channel in ('QR1', 'QR2', 'เงินสด', 'ออนไลน์', 'อื่นๆ')),
+  channel text not null check (channel in ('QR1', 'QR2', 'ไทยช่วยไทย', 'เงินสด', 'online(grab)', 'อื่นๆ')),
   subtotal numeric(12,2) not null,
   discount numeric(12,2) not null default 0,
   total numeric(12,2) not null,
@@ -88,7 +88,9 @@ create table if not exists public.sale_items (
   unit_price numeric(12,2) not null,
   discount numeric(12,2) not null default 0,
   revenue numeric(12,2) not null,
-  cost_of_goods numeric(12,2) not null
+  cost_of_goods numeric(12,2) not null,
+  line_type text not null default 'ขาย' check (line_type in ('ขาย', 'แถมโปร', 'แถมเอง')),
+  promo_label text
 );
 
 create table if not exists public.payments (
@@ -96,7 +98,7 @@ create table if not exists public.payments (
   sale_id text not null references public.sales(id) on delete cascade,
   payment_date date not null,
   branch_id text not null references public.branches(id),
-  channel text not null check (channel in ('QR1', 'QR2', 'เงินสด', 'ออนไลน์', 'อื่นๆ')),
+  channel text not null check (channel in ('QR1', 'QR2', 'ไทยช่วยไทย', 'เงินสด', 'online(grab)', 'อื่นๆ')),
   amount numeric(12,2) not null check (amount >= 0)
 );
 
