@@ -15,14 +15,18 @@ import {
   LockKeyhole,
   Minus,
   PackagePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Percent,
   Plus,
   RefreshCcw,
   ReceiptText,
   Save,
+  Search,
   Settings,
   ShieldAlert,
   Store,
+  Trash2,
   UserRound,
   WalletCards,
 } from "lucide-react";
@@ -57,6 +61,7 @@ import {
   createPosSale,
   createProduct,
   createRecipe,
+  deleteProduct,
   expiryAlerts,
   inventoryValue,
   lotStatus,
@@ -94,10 +99,11 @@ import type { AppState, Branch, PaymentChannel, Product, ProductType, Role } fro
 type Page =
   | "dashboard"
   | "pos"
+  | "products"
   | "dailySales"
   | "salesHistory"
   | "inventory"
-  | "grandIssue"
+
   | "expiry"
   | "recipes"
   | "count"
@@ -111,14 +117,14 @@ type Page =
 const pageItems: { id: Page; label: string; icon: typeof BarChart3; roles?: Role[] }[] = [
   { id: "dashboard", label: "ภาพรวม", icon: BarChart3, roles: ["owner", "backoffice"] },
   { id: "pos", label: "ขายหน้าร้าน", icon: CreditCard, roles: ["owner", "staff"] },
+  { id: "products", label: "สินค้า", icon: PackagePlus, roles: ["owner"] },
   { id: "dailySales", label: "ยอดขายวันนี้", icon: BarChart3, roles: ["owner", "staff", "backoffice"] },
   { id: "salesHistory", label: "บิลขาย", icon: ReceiptText, roles: ["owner", "backoffice"] },
   { id: "inventory", label: "คลัง", icon: Boxes, roles: ["owner", "staff", "backoffice"] },
-  { id: "grandIssue", label: "เบิกจากแกรนด์", icon: Store, roles: ["owner", "staff", "backoffice"] },
   { id: "expiry", label: "แจ้งเตือนหมดอายุ", icon: ShieldAlert, roles: ["owner", "staff"] },
   { id: "recipes", label: "สูตร / ต้นทุนเมนู", icon: ChefHat, roles: ["owner", "staff", "backoffice"] },
   { id: "count", label: "นับสต็อก", icon: ClipboardCheck, roles: ["owner", "staff", "backoffice"] },
-  { id: "cash", label: "เงินสดและค่าใช้จ่าย", icon: WalletCards, roles: ["owner", "backoffice"] },
+  { id: "cash", label: "ค่าใช้จ่าย", icon: WalletCards, roles: ["owner", "backoffice"] },
   { id: "closeShift", label: "ปิดกะ", icon: FileCheck2, roles: ["owner", "staff"] },
   { id: "financial", label: "งบและภาษี", icon: Download, roles: ["owner"] },
   { id: "reconcile", label: "ตรวจยอดปิดวัน", icon: Calculator, roles: ["owner"] },
@@ -127,13 +133,77 @@ const pageItems: { id: Page; label: string; icon: typeof BarChart3; roles?: Role
 ];
 
 const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
+const productCategories = ["ข้าวกล่อง", "อาหารว่าง", "น้ำ", "ขนม", "อื่นๆ"];
+const expenseCategories = ["ค่าแรง", "ค่าสาธารณูปโภค", "ค่าวัตถุดิบ", "ค่าดำเนินงาน", "ค่าบรรจุภัณฑ์", "อื่นๆ"];
+const expensePaymentChannels: PaymentChannel[] = ["QR1", "QR2", "เงินสด", "อื่นๆ"];
+
+function useButtonInteraction() {
+  useEffect(() => {
+    const updatePointer = (event: PointerEvent) => {
+      const button = (event.target as Element | null)?.closest("button") as HTMLButtonElement | null;
+      if (!button || button.disabled) return;
+      const rect = button.getBoundingClientRect();
+      button.style.setProperty("--mx", `${event.clientX - rect.left}px`);
+      button.style.setProperty("--my", `${event.clientY - rect.top}px`);
+      button.style.setProperty("--tilt-x", `${((event.clientY - rect.top) / rect.height - 0.5) * -2}deg`);
+      button.style.setProperty("--tilt-y", `${((event.clientX - rect.left) / rect.width - 0.5) * 2}deg`);
+    };
+
+    const pressButton = (event: PointerEvent) => {
+      const button = (event.target as Element | null)?.closest("button") as HTMLButtonElement | null;
+      if (!button || button.disabled) return;
+      button.classList.remove("button-rebound");
+      button.classList.add("button-pressed", "button-ripple");
+      window.setTimeout(() => button.classList.remove("button-ripple"), 520);
+    };
+
+    const releaseButton = (event: PointerEvent) => {
+      const button = (event.target as Element | null)?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+      button.classList.remove("button-pressed");
+      button.classList.add("button-rebound");
+      window.setTimeout(() => button.classList.remove("button-rebound"), 420);
+    };
+
+    const clearTilt = (event: PointerEvent) => {
+      const button = (event.target as Element | null)?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+      button.style.setProperty("--tilt-x", "0deg");
+      button.style.setProperty("--tilt-y", "0deg");
+    };
+
+    document.addEventListener("pointermove", updatePointer);
+    document.addEventListener("pointerdown", pressButton);
+    document.addEventListener("pointerup", releaseButton);
+    document.addEventListener("pointercancel", releaseButton);
+    document.addEventListener("pointerleave", clearTilt, true);
+
+    return () => {
+      document.removeEventListener("pointermove", updatePointer);
+      document.removeEventListener("pointerdown", pressButton);
+      document.removeEventListener("pointerup", releaseButton);
+      document.removeEventListener("pointercancel", releaseButton);
+      document.removeEventListener("pointerleave", clearTilt, true);
+    };
+  }, []);
+}
+
+function shortDate(date?: string) {
+  if (!date) return "-";
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return date;
+  return `${match[3]}-${match[2]}-${match[1].slice(-2)}`;
+}
 
 export function App() {
+  useButtonInteraction();
   const [state, setState] = useState<AppState>(() => localRepository.load());
   const [role, setRole] = useState<Role | null>(null);
   const [currentBranch, setCurrentBranch] = useState<Branch>("บ้านโจ้");
   const [page, setPage] = useState<Page>("dashboard");
   const [toast, setToast] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarTooltip, setSidebarTooltip] = useState<{ label: string; top: number } | null>(null);
 
   useEffect(() => localRepository.save(state), [state]);
 
@@ -172,12 +242,25 @@ export function App() {
     resetState();
     const next = localRepository.load();
     setState(next);
-    setToast("รีเซ็ตข้อมูลตัวอย่างแล้ว");
+    setToast("ล้างข้อมูลในเครื่องแล้ว");
+  }
+
+  function showSidebarTooltip(label: string, element: HTMLElement) {
+    if (!sidebarCollapsed && !window.matchMedia("(max-width: 1250px)").matches) return;
+    const rect = element.getBoundingClientRect();
+    setSidebarTooltip({ label, top: rect.top + rect.height / 2 });
+  }
+
+  function hideSidebarTooltip() {
+    setSidebarTooltip(null);
   }
 
   return (
-    <div className="app-shell">
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <aside className="sidebar">
+        <button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "เปิดแถบเมนู" : "ปิดแถบเมนู"}>
+          {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+        </button>
         <div className="brand">
           <GrandHouseMark />
           <div>
@@ -193,20 +276,43 @@ export function App() {
           {visiblePages.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={page === item.id ? "nav-active" : ""} onClick={() => setPage(item.id)}>
+              <button
+                key={item.id}
+                className={page === item.id ? "nav-active" : ""}
+                onClick={() => setPage(item.id)}
+                onMouseEnter={(event) => showSidebarTooltip(item.label, event.currentTarget)}
+                onMouseLeave={hideSidebarTooltip}
+                onFocus={(event) => showSidebarTooltip(item.label, event.currentTarget)}
+                onBlur={hideSidebarTooltip}
+              >
                 <Icon size={20} />
                 <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
-        <button className="reset-button" onClick={resetDemo}>
-          <RefreshCcw size={18} /> รีเซ็ตข้อมูลตัวอย่าง
+        <button
+          className="reset-button"
+          onClick={resetDemo}
+          onMouseEnter={(event) => showSidebarTooltip("ล้างข้อมูลในเครื่อง", event.currentTarget)}
+          onMouseLeave={hideSidebarTooltip}
+          onFocus={(event) => showSidebarTooltip("ล้างข้อมูลในเครื่อง", event.currentTarget)}
+          onBlur={hideSidebarTooltip}
+        >
+          <RefreshCcw size={18} /> <span>ล้างข้อมูลในเครื่อง</span>
         </button>
-        <button className="reset-button" onClick={() => setRole(null)}>
-          <LogOut size={18} /> ออกจากระบบ
+        <button
+          className="reset-button"
+          onClick={() => setRole(null)}
+          onMouseEnter={(event) => showSidebarTooltip("ออกจากระบบ", event.currentTarget)}
+          onMouseLeave={hideSidebarTooltip}
+          onFocus={(event) => showSidebarTooltip("ออกจากระบบ", event.currentTarget)}
+          onBlur={hideSidebarTooltip}
+        >
+          <LogOut size={18} /> <span>ออกจากระบบ</span>
         </button>
       </aside>
+      {sidebarTooltip && <div className="sidebar-tooltip" style={{ top: sidebarTooltip.top }}>{sidebarTooltip.label}</div>}
 
       <main className="main">
         <header className="topbar">
@@ -221,10 +327,10 @@ export function App() {
 
         {page === "dashboard" && <Dashboard state={state} role={role} />}
         {page === "pos" && <PosPage state={state} commit={commit} fail={fail} lockedBranch={role === "staff" ? currentBranch : undefined} />}
+        {page === "products" && <ProductsPage state={state} commit={commit} fail={fail} />}
         {page === "dailySales" && <DailySalesPage state={state} role={role} currentBranch={currentBranch} />}
         {page === "salesHistory" && <SalesHistoryPage state={state} commit={commit} fail={fail} />}
         {page === "inventory" && <Inventory state={state} commit={commit} fail={fail} />}
-        {page === "grandIssue" && <GrandIssuePage state={state} />}
         {page === "expiry" && <ExpiryCenter state={state} commit={commit} fail={fail} />}
         {page === "recipes" && <Recipes state={state} commit={commit} fail={fail} />}
         {page === "count" && <StockCount state={state} commit={commit} fail={fail} />}
@@ -257,10 +363,10 @@ function GrandHouseMark({ large = false }: { large?: boolean }) {
   );
 }
 
-const loginModes: { role: Role; label: string; detail: string; icon: typeof Store }[] = [
-  { role: "staff", label: "พนักงานสาขา", detail: "ขาย เบิก สูตร คลัง นับสต็อก และวันหมดอายุเฉพาะสาขา", icon: Store },
-  { role: "backoffice", label: "ฝ่ายออฟฟิศ", detail: "ดู POS คลัง เบิก สูตร และบันทึกทุกสาขารวมกัน", icon: Boxes },
-  { role: "owner", label: "เจ้าของ", detail: "ดูทุกอย่าง กำไร ภาษี ตั้งค่า และรายงาน", icon: UserRound },
+const loginModes: { role: Role; label: string; icon: typeof Store }[] = [
+  { role: "staff", label: "พนักงานสาขา", icon: Store },
+  { role: "backoffice", label: "ฝ่ายออฟฟิศ", icon: Boxes },
+  { role: "owner", label: "เจ้าของ", icon: UserRound },
 ];
 
 function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => void }) {
@@ -285,7 +391,6 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => voi
         <div className="login-logo">
           <GrandHouseMark large />
           <h1>Grand House</h1>
-          <p>เลือกระบบที่ต้องการเข้าใช้งาน</p>
         </div>
         <form className="login-form" onSubmit={submit}>
           <div className="login-mode-grid">
@@ -295,7 +400,6 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => voi
                 <button key={mode.role} type="button" className={selectedRole === mode.role ? "login-mode active" : "login-mode"} onClick={() => setSelectedRole(mode.role)}>
                   <Icon size={20} />
                   <strong>{mode.label}</strong>
-                  <span>{mode.detail}</span>
                 </button>
               );
             })}
@@ -309,10 +413,6 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => voi
               ))}
             </div>
           )}
-          <div className="login-context">
-            <span>{selectedRole === "staff" ? `ล็อกสาขา ${selectedBranch}` : "ข้อมูลรวมทุกสาขา"}</span>
-            <span>{selectedRole === "staff" ? "ทำงานประจำวันของสาขา" : selectedRole === "backoffice" ? "ไม่ต้องเลือกสาขา" : "เห็นทุกเมนู"}</span>
-          </div>
           <label>
             <span>รหัสเข้าใช้งาน</span>
             <input value={pin} inputMode="numeric" maxLength={6} onChange={(event) => setPin(event.target.value)} placeholder="กรอกรหัสของทางเข้านี้" />
@@ -321,7 +421,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, branch: Branch) => voi
           <button className="primary action" type="submit">
             <LockKeyhole size={18} /> เข้าสู่ระบบ
           </button>
-          <p className="login-note">prototype นี้จำลองสิทธิ์แยกทางเข้า ระบบจริงควรใช้บัญชีผู้ใช้แยกคนและ Supabase Auth</p>
+
         </form>
       </section>
     </main>
@@ -953,13 +1053,20 @@ function SalesHistoryPage({ state, commit, fail }: { state: AppState; commit: (n
   );
 }
 
-function Inventory({ state, commit, fail }: { state: AppState; commit: (next: AppState, message: string) => void; fail: (message?: string) => void }) {
-  const [filter, setFilter] = useState<Product["type"] | "all">("all");
-  const products = state.products.filter((product) => product.type !== "produced_finished_good" || true);
-  const visibleLots = state.lots.filter((lot) => {
-    const product = productById(state.products, lot.productId);
-    return filter === "all" || product?.type === filter;
-  });
+const rawMaterialCategories = ["เนื้อสัตว์", "ผัก", "ของแห้ง", "เครื่องปรุง", "น้ำ", "บรรจุภัณฑ์", "อื่นๆ"];
+const rawMaterialUnits = ["กก.", "ชิ้น", "ถุง", "กล่อง", "ขวด", "แพ็ค", "ลิตร", "อื่นๆ"];
+
+function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next: AppState, message: string) => void; fail: (message?: string) => void }) {
+  const [productSearch, setProductSearch] = useState("");
+  const [supplierTab, setSupplierTab] = useState<"The Grand's" | "Grand House">("The Grand's");
+  const [productTypeTab, setProductTypeTab] = useState<"สินค้า" | "วัตถุดิบ">("สินค้า");
+
+  const normalizedSearch = productSearch.trim().toLowerCase();
+  const productNameOptions = useMemo(() => [...new Set(state.products.map((product) => product.name.trim()).filter(Boolean))].sort(), [state.products]);
+  const matchesProductSearch = (product: Product) => !normalizedSearch || product.name.toLowerCase().includes(normalizedSearch);
+  const grandProducts = state.products.filter((product) => product.supplier === "The Grand's" && matchesProductSearch(product));
+  const houseMenuProducts = state.products.filter((product) => product.type === "produced_finished_good" && product.supplier === "Grand House" && matchesProductSearch(product));
+  const houseRawMaterials = state.products.filter((product) => (product.type === "raw_material" || product.type === "packaging") && matchesProductSearch(product));
 
   function submitProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -969,7 +1076,9 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
       type: form.get("type") as ProductType,
       category: String(form.get("category")),
       unit: String(form.get("unit")),
-      salePrice: Number(form.get("salePrice")),
+      salePrice: Number(form.get("salePrice") || 0),
+      standardCost: Number(form.get("standardCost")),
+      costStartDate: String(form.get("costStartDate")),
       supplier: String(form.get("supplier")),
     });
     if (result.error) return fail(result.error);
@@ -981,133 +1090,483 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
     commit(setProductActive(state, productId, active), active ? "เปิดใช้งานสินค้าแล้ว" : "ปิดใช้งานสินค้าแล้ว");
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const quantity = Number(form.get("quantity"));
-    const unitCost = Number(form.get("unitCost"));
-    if (quantity <= 0 || unitCost < 0) return fail("จำนวนหรือต้นทุนไม่ถูกต้อง");
-    const next = receiveLot(state, {
-      productId: String(form.get("productId")),
-      branch: form.get("branch") as Branch,
-      quantity,
-      unitCost,
-      receivedDate: String(form.get("receivedDate")),
-      expiryDate: String(form.get("expiryDate")),
-      supplier: String(form.get("supplier")),
-      note: String(form.get("note")),
-    });
-    event.currentTarget.reset();
-    commit(next, "รับสินค้าเข้าแล้ว");
+  function removeProduct(product: Product) {
+    if (!window.confirm(`ลบ ${product.name} ออกจากรายการสินค้า?`)) return;
+    commit(deleteProduct(state, product.id), "ลบสินค้าแล้ว");
   }
 
-  function submitAdjustment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const direction = String(form.get("direction"));
-    const amount = Number(form.get("adjustQty"));
-    if (amount <= 0) return fail("จำนวนปรับสต็อกต้องมากกว่า 0");
-    const result = adjustLot(state, {
-      lotId: String(form.get("lotId")),
-      date: String(form.get("date")),
-      quantityChange: direction === "ลด" ? -amount : amount,
-      reason: String(form.get("reason")),
-      markWaste: form.get("markWaste") === "on",
-    });
-    if (result.error) return fail(result.error);
-    event.currentTarget.reset();
-    commit(result.state, "ปรับสต็อกแล้ว");
+  function productTableRows(products: Product[], showSalePrice = true) {
+    return products.map((product) => [
+      product.id,
+      product.name,
+      product.category,
+      showSalePrice ? (product.salePrice ? money(product.salePrice) : "-") : product.unit,
+      product.standardCost !== undefined ? money(product.standardCost) : "-",
+      shortDate(product.costStartDate),
+      <button key={`${product.id}-status`} className={product.active ? "status-toggle active" : "status-toggle inactive"} onClick={() => toggleProduct(product.id, !product.active)}>
+        {product.active ? "ใช้งาน" : "ปิดใช้งาน"}
+      </button>,
+      <button key={`${product.id}-delete`} className="icon-button danger-soft" type="button" onClick={() => removeProduct(product)} aria-label={`ลบ ${product.name}`}>
+        <Trash2 size={18} />
+      </button>,
+    ]);
   }
 
   return (
     <section className="stack">
-      <Panel title="เพิ่มสินค้า วัตถุดิบ หรือเมนูใหม่" icon={PackagePlus}>
-        <form className="clean-form product-form" onSubmit={submitProduct}>
-          <Input name="name" label="ชื่อรายการ" placeholder="เช่น หมูกรอบ / น้ำพริก / ข้าวกล่องใหม่" />
-          <Select
-            name="type"
-            label="ประเภท"
-            options={[
-              ["raw_material", "วัตถุดิบ"],
-              ["packaging", "บรรจุภัณฑ์"],
-              ["purchased_finished_good", "ซื้อมาขาย"],
-              ["produced_finished_good", "เมนูผลิตเอง"],
-            ]}
+      <Panel title="ค้นหารายการสินค้า" icon={Search}>
+        <label className="product-search">
+          <span>ค้นหาจากชื่อสินค้า/เมนู</span>
+          <input list="product-name-options" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="พิมพ์หรือเลือกรายการ เช่น กะเพราไก่" />
+        </label>
+        <datalist id="product-name-options">
+          {productNameOptions.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+        <div className="filter-row" style={{ marginTop: 16 }}>
+          <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>แหล่งสินค้า:</span>
+          <button className={supplierTab === "The Grand's" ? "chip active" : "chip"} onClick={() => setSupplierTab("The Grand's")}>
+            <Store size={14} style={{ marginRight: 4 }} /> The Grand's
+          </button>
+          <button className={supplierTab === "Grand House" ? "chip active" : "chip"} onClick={() => setSupplierTab("Grand House")}>
+            <ChefHat size={14} style={{ marginRight: 4 }} /> Grand House
+          </button>
+        </div>
+        {supplierTab === "Grand House" && (
+          <div className="filter-row" style={{ marginTop: 8 }}>
+            <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>ประเภท:</span>
+            <button className={productTypeTab === "สินค้า" ? "chip active" : "chip"} onClick={() => setProductTypeTab("สินค้า")}>สินค้า / เมนู</button>
+            <button className={productTypeTab === "วัตถุดิบ" ? "chip active" : "chip"} onClick={() => setProductTypeTab("วัตถุดิบ")}>วัตถุดิบ</button>
+          </div>
+        )}
+      </Panel>
+
+      {supplierTab === "The Grand's" && (
+        <Panel title="สินค้าจาก The Grand's" icon={Store}>
+          <form className="clean-form product-split-form" onSubmit={submitProduct}>
+            <Input name="name" label="ชื่อสินค้า" placeholder="เช่น ข้าวกล่อง / เค้ก / ขนม" />
+            <input type="hidden" name="type" value="purchased_finished_good" />
+            <Select name="category" label="หมวด" defaultValue="ข้าวกล่อง" options={productCategories.map((category) => [category, category])} />
+            <input type="hidden" name="unit" value="ชิ้น" />
+            <Input name="salePrice" label="ราคาขาย" type="number" step="0.01" defaultValue="0" />
+            <Input name="standardCost" label="ต้นทุนต่อหน่วย" type="number" step="0.01" defaultValue="0" />
+            <Input name="costStartDate" label="วันที่เริ่มใช้ต้นทุน" type="date" defaultValue={today} />
+            <input type="hidden" name="supplier" value="The Grand's" />
+            <button className="primary action" type="submit">
+              <Save size={18} /> เพิ่มสินค้า
+            </button>
+          </form>
+          <SimpleTable
+            headers={["รหัส", "ชื่อสินค้า", "หมวด", "ราคาขาย", "ต้นทุน", "เริ่มใช้", "สถานะ", "จัดการ"]}
+            rows={productTableRows(grandProducts)}
+            empty={normalizedSearch ? "ไม่พบสินค้าจาก The Grand's ตามคำค้นหา" : "ยังไม่มีสินค้าจาก The Grand's"}
           />
-          <Input name="category" label="หมวด" defaultValue="อาหาร" />
-          <Input name="unit" label="หน่วยนับ" defaultValue="ชิ้น" />
-          <Input name="salePrice" label="ราคาขาย (ถ้ามี)" type="number" step="0.01" defaultValue="0" />
-          <Input name="supplier" label="ผู้ขาย/แหล่งซื้อ" defaultValue="The Grand's" />
-          <button className="primary action" type="submit">
-            <Save size={18} /> เพิ่มรายการ
-          </button>
-        </form>
-      </Panel>
-      <Panel title="รายการสินค้าและวัตถุดิบทั้งหมด" icon={Boxes}>
-        <SimpleTable
-          headers={["รหัส", "ชื่อ", "ประเภท", "หมวด", "หน่วย", "ราคาขาย", "สถานะ", "จัดการ"]}
-          rows={state.products.map((product) => [
-            product.id,
-            product.name,
-            productTypeLabel[product.type],
-            product.category,
-            product.unit,
-            product.salePrice ? money(product.salePrice) : "-",
-            <Badge key={`${product.id}-status`} status={product.active ? "ปกติ" : "ปิดใช้งาน"} />,
-            <button key={`${product.id}-toggle`} className="small-danger" onClick={() => toggleProduct(product.id, !product.active)}>
-              {product.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
-            </button>,
-          ])}
-        />
-      </Panel>
-      <Panel title="รับสินค้าเข้าคลัง" icon={PackagePlus}>
-        <form className="clean-form" onSubmit={submit}>
-          <Select name="productId" label="สินค้า" options={products.map((product) => [product.id, `${product.name} (${productTypeLabel[product.type]})`])} />
-          <Select name="branch" label="สาขา" options={branches.map((branch) => [branch, branch])} />
-          <Input name="quantity" label="จำนวน" type="number" step="0.01" defaultValue="10" />
-          <Input name="unitCost" label="ต้นทุนต่อหน่วย" type="number" step="0.01" defaultValue="25" />
-          <Input name="receivedDate" label="วันที่รับเข้า" type="date" defaultValue={today} />
-          <Input name="expiryDate" label="วันหมดอายุ" type="date" defaultValue="2026-06-04" />
-          <Input name="supplier" label="ผู้ขาย/แหล่งซื้อ" defaultValue="The Grand's" />
-          <Input name="note" label="หมายเหตุ" defaultValue="รับสินค้าเข้า" />
-          <button className="primary action" type="submit">
-            <Save size={18} /> บันทึกรับเข้า
-          </button>
-        </form>
-      </Panel>
-      <Panel title="ปรับสต็อกมือ" icon={ClipboardCheck}>
-        <form className="clean-form adjustment-form" onSubmit={submitAdjustment}>
-          <Select
-            name="lotId"
-            label="เลือก LOT"
-            options={activeLots(state).map((lot) => {
-              const product = productById(state.products, lot.productId);
-              return [lot.id, `${lot.id} · ${product?.name} · เหลือ ${number(lot.remaining, 2)} ${product?.unit || ""}`];
-            })}
+        </Panel>
+      )}
+
+      {supplierTab === "Grand House" && productTypeTab === "สินค้า" && (
+        <Panel title="เมนูจาก Grand House" icon={ChefHat}>
+          <form className="clean-form product-split-form" onSubmit={submitProduct}>
+            <Input name="name" label="ชื่อเมนู" placeholder="เช่น เมนูข้าว / เมนูอาหารใหม่" />
+            <input type="hidden" name="type" value="produced_finished_good" />
+            <Select name="category" label="หมวด" defaultValue="ข้าวกล่อง" options={productCategories.map((category) => [category, category])} />
+            <input type="hidden" name="unit" value="จาน" />
+            <Input name="salePrice" label="ราคาขาย" type="number" step="0.01" defaultValue="0" />
+            <Input name="standardCost" label="ต้นทุนต่อหน่วย" type="number" step="0.01" defaultValue="0" />
+            <Input name="costStartDate" label="วันที่เริ่มใช้ต้นทุน" type="date" defaultValue={today} />
+            <input type="hidden" name="supplier" value="Grand House" />
+            <button className="primary action" type="submit">
+              <Save size={18} /> เพิ่มเมนู
+            </button>
+          </form>
+          <SimpleTable
+            headers={["รหัส", "ชื่อเมนู", "หมวด", "ราคาขาย", "ต้นทุน", "เริ่มใช้", "สถานะ", "จัดการ"]}
+            rows={productTableRows(houseMenuProducts)}
+            empty={normalizedSearch ? "ไม่พบเมนูจาก Grand House ตามคำค้นหา" : "ยังไม่มีเมนูจาก Grand House"}
           />
-          <Input name="date" label="วันที่" type="date" defaultValue={today} />
-          <Select name="direction" label="ประเภท" options={[["ลด", "ลด"], ["เพิ่ม", "เพิ่ม"]]} />
-          <Input name="adjustQty" label="จำนวน" type="number" step="0.01" defaultValue="1" />
-          <Input name="reason" label="เหตุผล" defaultValue="นับคลังจริงไม่ตรงระบบ" />
-          <label className="checkline">
-            <input name="markWaste" type="checkbox" />
-            <span>ตัดเสียเมื่อยอดเหลือเป็น 0</span>
-          </label>
-          <button className="primary action" type="submit">
-            <Save size={18} /> บันทึกปรับสต็อก
+        </Panel>
+      )}
+
+      {supplierTab === "Grand House" && productTypeTab === "วัตถุดิบ" && (
+        <Panel title="วัตถุดิบและบรรจุภัณฑ์" icon={Boxes}>
+          <form className="clean-form product-split-form" onSubmit={submitProduct}>
+            <Input name="name" label="ชื่อวัตถุดิบ" placeholder="เช่น เนื้อหมู / แป้ง / ถุงร้อน" />
+            <input type="hidden" name="type" value="raw_material" />
+            <Select name="category" label="หมวด" defaultValue="ของแห้ง" options={rawMaterialCategories.map((c) => [c, c])} />
+            <Select name="unit" label="หน่วย" defaultValue="กก." options={rawMaterialUnits.map((u) => [u, u])} />
+            <input type="hidden" name="standardCost" value="0" />
+            <Input name="costStartDate" label="วันที่เริ่มใช้ต้นทุน" type="date" defaultValue={today} />
+            <input type="hidden" name="supplier" value="Grand House" />
+            <button className="primary action" type="submit">
+              <Save size={18} /> เพิ่มวัตถุดิบ
+            </button>
+          </form>
+          <SimpleTable
+            headers={["รหัส", "ชื่อวัตถุดิบ", "หมวด", "หน่วย", "ต้นทุน", "เริ่มใช้", "สถานะ", "จัดการ"]}
+            rows={productTableRows(houseRawMaterials, false)}
+            empty={normalizedSearch ? "ไม่พบวัตถุดิบตามคำค้นหา" : "ยังไม่มีวัตถุดิบ"}
+          />
+        </Panel>
+      )}
+    </section>
+  );
+}
+
+function Inventory({ state, commit, fail }: { state: AppState; commit: (next: AppState, message: string) => void; fail: (message?: string) => void }) {
+  const grandIssuedProducts = state.products.filter(
+    (product) => product.supplier === "The Grand's" && product.type === "purchased_finished_good" && product.active
+  );
+  const houseProducedProducts = state.products.filter(
+    (product) => product.supplier === "Grand House" && product.type === "produced_finished_good" && product.active
+  );
+  const houseRawMaterials = state.products.filter(
+    (product) => product.supplier === "Grand House" && product.type === "raw_material" && product.active
+  );
+  const housePackaging = state.products.filter(
+    (product) => product.supplier === "Grand House" && product.type === "packaging" && product.active
+  );
+  const grandActiveProducts = grandIssuedProducts;
+  const houseActiveProducts = houseProducedProducts;
+
+  const [grandProductId, setGrandProductId] = useState("");
+  const [grandSearch, setGrandSearch] = useState("");
+  const [grandBranch, setGrandBranch] = useState<Branch>("บ้านโจ้");
+  const [grandQty, setGrandQty] = useState(1);
+  const [grandDate, setGrandDate] = useState(today);
+  const [grandExpiryDate, setGrandExpiryDate] = useState(today);
+
+  const [houseProductId, setHouseProductId] = useState("");
+  const [houseSearch, setHouseSearch] = useState("");
+  const [houseBranch, setHouseBranch] = useState<Branch>("บ้านโจ้");
+  const [houseQty, setHouseQty] = useState(1);
+  const [houseDate, setHouseDate] = useState(today);
+  const [houseExpiryDate, setHouseExpiryDate] = useState(today);
+
+  const [matProductId, setMatProductId] = useState("");
+  const [matSearch, setMatSearch] = useState("");
+  const [matBranch, setMatBranch] = useState<Branch>("บ้านโจ้");
+  const [matQty, setMatQty] = useState(1);
+  const [matWeightKg, setMatWeightKg] = useState(0);
+  const [matDate, setMatDate] = useState(today);
+  const [matExpiryDate, setMatExpiryDate] = useState(today);
+
+  const [selectedBranch, setSelectedBranch] = useState<Branch | "all">("all");
+  const [inventoryTab, setInventoryTab] = useState<"products" | "materials">("products");
+  const [materialCategory, setMaterialCategory] = useState<"all" | string>("all");
+  const [supplierFilter, setSupplierFilter] = useState<"all" | "The Grand's" | "Grand House">("all");
+  const materialCategories = ["เนื้อสัตว์", "ผัก", "ของแห้ง", "เครื่องปรุง", "น้ำ", "บรรจุภัณฑ์", "อื่นๆ"];
+
+  const allMaterials = [...houseRawMaterials, ...housePackaging];
+  const filteredMaterials = materialCategory === "all" ? allMaterials : allMaterials.filter((p) => p.category === materialCategory);
+  const selectedMaterial = productById(state.products, matProductId);
+  const selectedMaterialUsesWeight = selectedMaterial?.unit === "กก.";
+
+  function inventoryProductRows(sourceProducts: Product[], showStock = false, showCategory = false, showCostDate = false, showLotDate = false) {
+    return sourceProducts.map((product) => {
+      const cells: React.ReactNode[] = [product.id, product.name];
+      if (showStock) {
+        const remaining = state.lots
+          .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+          .reduce((sum, lot) => sum + lot.remaining, 0);
+        cells.push(number(remaining, 2));
+      }
+      if (showCategory) {
+        cells.push(product.category);
+      }
+      if (showCostDate) {
+        cells.push(shortDate(product.costStartDate));
+      }
+      if (showLotDate) {
+        const latestLot = state.lots
+          .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+          .sort((a, b) => b.receivedDate.localeCompare(a.receivedDate))[0];
+        cells.push(shortDate(latestLot?.receivedDate));
+      }
+      const activeLots = state.lots.filter((lot) =>
+        lot.productId === product.id &&
+        lot.remaining > 0 &&
+        (selectedBranch === "all" || lot.branch === selectedBranch)
+      );
+      const nearestExpiry = activeLots.length > 0
+        ? activeLots.reduce((nearest, lot) => lot.expiryDate < nearest ? lot.expiryDate : nearest, activeLots[0].expiryDate)
+        : undefined;
+      cells.push(shortDate(nearestExpiry));
+      return cells;
+    });
+  }
+
+  function materialInventoryRows(sourceProducts: Product[]) {
+    return sourceProducts.map((product) => {
+      const lots = state.lots
+        .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+        .sort((a, b) => b.receivedDate.localeCompare(a.receivedDate));
+      const remaining = lots.reduce((sum, lot) => sum + lot.remaining, 0);
+      const latestLot = lots[0];
+      return [
+        product.id,
+        product.name,
+        `${number(remaining, 2)} ${product.unit}`,
+        product.category,
+        shortDate(latestLot?.receivedDate || product.costStartDate),
+        shortDate(latestLot?.expiryDate || product.costStartDate),
+      ];
+    });
+  }
+
+  function submitGrandIssue(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!grandProductId) return fail("กรุณาเลือกสินค้า");
+    const product = productById(state.products, grandProductId);
+    const next = receiveLot(state, {
+      productId: grandProductId,
+      branch: grandBranch,
+      quantity: grandQty,
+      unitCost: product?.standardCost || 0,
+      receivedDate: grandDate,
+      expiryDate: grandExpiryDate,
+      supplier: "The Grand's",
+      note: "เบิกจาก The Grand's",
+    });
+    commit(next, "รับสินค้าเข้าแล้ว");
+    setGrandProductId("");
+    setGrandSearch("");
+    setGrandQty(1);
+    setGrandExpiryDate(today);
+  }
+
+  function submitHouseProduce(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!houseProductId) return fail("กรุณาเลือกสินค้า");
+    const recipe = state.recipes.find((r) => r.outputProductId === houseProductId);
+    if (!recipe) return fail("ไม่พบสูตรอาหารสำหรับสินค้านี้");
+    const result = produceBatch(state, {
+      recipeId: recipe.id,
+      branch: houseBranch,
+      producedQty: houseQty,
+      productionDate: houseDate,
+      expiryDate: houseExpiryDate,
+    });
+    if (result.error) return fail(result.error);
+    commit(result.state, "ผลิตสินค้าแล้ว");
+    setHouseProductId("");
+    setHouseSearch("");
+    setHouseQty(1);
+    setHouseExpiryDate(today);
+  }
+
+  function submitMaterial(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!matProductId) return fail("กรุณาเลือกรายการ");
+    const product = productById(state.products, matProductId);
+    const quantity = product?.unit === "กก." ? matWeightKg : matQty;
+    if (quantity <= 0) return fail(product?.unit === "กก." ? "กรุณากรอกน้ำหนักกิโลกรัม" : "กรุณากรอกจำนวน");
+    const next = receiveLot(state, {
+      productId: matProductId,
+      branch: matBranch,
+      quantity,
+      unitCost: product?.standardCost || 0,
+      receivedDate: matDate,
+      expiryDate: matExpiryDate,
+      supplier: "Grand House",
+      note: `${product?.type === "packaging" ? "รับบรรจุภัณฑ์" : "รับวัตถุดิบ"} ${number(quantity, 2)} ${product?.unit || "หน่วย"}`,
+    });
+    commit(next, "รับเข้าคลังแล้ว");
+    setMatProductId("");
+    setMatSearch("");
+    setMatQty(1);
+    setMatWeightKg(0);
+    setMatExpiryDate(today);
+  }
+
+  return (
+    <section className="stack">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="filter-row">
+            <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>ดูสาขา:</span>
+            {(["all", ...branches] as const).map((item) => (
+              <button key={item} className={selectedBranch === item ? "chip active" : "chip"} onClick={() => setSelectedBranch(item)}>
+                {item === "all" ? "ทุกสาขา" : item}
+              </button>
+            ))}
+          </div>
+          <div className="filter-row">
+            <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>ดูหมวด:</span>
+            <button className={inventoryTab === "products" ? "chip active" : "chip"} onClick={() => setInventoryTab("products")}>สินค้า</button>
+            <button className={inventoryTab === "materials" ? "chip active" : "chip"} onClick={() => setInventoryTab("materials")}>วัตถุดิบ</button>
+          </div>
+        </div>
+        <div className="supplier-filter-group">
+          <button
+            className={supplierFilter === "The Grand's" ? "supplier-filter-btn active" : "supplier-filter-btn"}
+            onClick={() => setSupplierFilter(supplierFilter === "The Grand's" ? "all" : "The Grand's")}
+          >
+            <Store size={16} />
+            <span>The Grand's</span>
           </button>
-        </form>
-      </Panel>
-      <Panel title="รายการคงเหลือแยก LOT" icon={Boxes}>
+          <button
+            className={supplierFilter === "Grand House" ? "supplier-filter-btn active" : "supplier-filter-btn"}
+            onClick={() => setSupplierFilter(supplierFilter === "Grand House" ? "all" : "Grand House")}
+          >
+            <ChefHat size={16} />
+            <span>Grand House</span>
+          </button>
+        </div>
+      </div>
+      {inventoryTab === "materials" && (
         <div className="filter-row">
-          {(["all", "raw_material", "packaging", "purchased_finished_good", "produced_finished_good"] as const).map((item) => (
-            <button key={item} className={filter === item ? "chip active" : "chip"} onClick={() => setFilter(item)}>
-              {item === "all" ? "ทั้งหมด" : productTypeLabel[item]}
+          <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>กรอง:</span>
+          <button className={materialCategory === "all" ? "chip active" : "chip"} onClick={() => setMaterialCategory("all")}>ทั้งหมด</button>
+          {materialCategories.map((cat) => (
+            <button key={cat} className={materialCategory === cat ? "chip active" : "chip"} onClick={() => setMaterialCategory(cat)}>
+              {cat}
             </button>
           ))}
         </div>
-        <LotsTable state={state} lots={visibleLots} />
-      </Panel>
+      )}
+      <div className="inventory-product-scroll">
+        <div className={inventoryTab === "materials" || supplierFilter !== "all" ? "inventory-product-grid materials-grid" : "inventory-product-grid"}>
+          {inventoryTab === "products" && (
+            <>
+              {(supplierFilter === "all" || supplierFilter === "The Grand's") && <Panel title="เบิกสินค้า The Grand's" icon={Store}>
+                <form className="clean-form mini-form" onSubmit={submitGrandIssue}>
+                  <label>
+                    <span>เลือกสินค้า</span>
+                    <input
+                      list="grand-active-list"
+                      value={grandSearch}
+                      onChange={(e) => {
+                        setGrandSearch(e.target.value);
+                        const idMatch = e.target.value.match(/\[(.*?)\]/)?.[1];
+                        const match = idMatch
+                          ? grandActiveProducts.find((p) => p.id === idMatch)
+                          : grandActiveProducts.find((p) => p.name === e.target.value);
+                        setGrandProductId(match?.id || "");
+                      }}
+                      placeholder="พิมพ์หรือเลือกรายการ"
+                    />
+                    <datalist id="grand-active-list">
+                      {grandActiveProducts.map((p) => (
+                        <option key={p.id} value={`${p.name} [${p.id}]`} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <Select name="grandBranch" label="สาขา" value={grandBranch} onChange={(e) => setGrandBranch(e.target.value as Branch)} options={branches.map((b) => [b, b])} />
+                  <Input name="grandQty" label="จำนวน" type="number" step="0.01" value={grandQty} onChange={(e) => setGrandQty(Number(e.target.value))} />
+                  <Input name="grandDate" label="วันที่เบิก" type="date" value={grandDate} onChange={(e) => setGrandDate(e.target.value)} />
+                  <Input name="grandExpiryDate" label="วันหมดอายุ" type="date" value={grandExpiryDate} onChange={(e) => setGrandExpiryDate(e.target.value)} />
+                  <button className="primary action" type="submit"><Save size={18} /> บันทึกเบิก</button>
+                </form>
+                <SimpleTable
+                  headers={["รหัส", "ชื่อ", "คงเหลือ", "วันที่เบิก", "หมดอายุ"]}
+                  rows={inventoryProductRows(grandIssuedProducts, true, false, true)}
+                  empty="ยังไม่มีสินค้าเบิกจาก The Grand's"
+                />
+              </Panel>}
+              {(supplierFilter === "all" || supplierFilter === "Grand House") && <Panel title="ผลิตสินค้า Grand House" icon={Factory}>
+                <form className="clean-form mini-form" onSubmit={submitHouseProduce}>
+                  <label>
+                    <span>เลือกสินค้า</span>
+                    <input
+                      list="house-active-list"
+                      value={houseSearch}
+                      onChange={(e) => {
+                        setHouseSearch(e.target.value);
+                        const idMatch = e.target.value.match(/\[(.*?)\]/)?.[1];
+                        const match = idMatch
+                          ? houseActiveProducts.find((p) => p.id === idMatch)
+                          : houseActiveProducts.find((p) => p.name === e.target.value);
+                        setHouseProductId(match?.id || "");
+                      }}
+                      placeholder="พิมพ์หรือเลือกรายการ"
+                    />
+                    <datalist id="house-active-list">
+                      {houseActiveProducts.map((p) => (
+                        <option key={p.id} value={`${p.name} [${p.id}]`} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <Select name="houseBranch" label="สาขา" value={houseBranch} onChange={(e) => setHouseBranch(e.target.value as Branch)} options={branches.map((b) => [b, b])} />
+                  <Input name="houseQty" label="จำนวน" type="number" step="0.01" value={houseQty} onChange={(e) => setHouseQty(Number(e.target.value))} />
+                  <Input name="houseDate" label="วันที่ผลิต" type="date" value={houseDate} onChange={(e) => setHouseDate(e.target.value)} />
+                  <Input name="houseExpiryDate" label="วันหมดอายุ" type="date" value={houseExpiryDate} onChange={(e) => setHouseExpiryDate(e.target.value)} />
+                  <button className="primary action" type="submit"><Save size={18} /> บันทึกผลิต</button>
+                </form>
+                <SimpleTable
+                  headers={["รหัส", "ชื่อ", "คงเหลือ", "วันที่ผลิต", "หมดอายุ"]}
+                  rows={inventoryProductRows(houseProducedProducts, true, false, false, true)}
+                  empty="ยังไม่มีสินค้าผลิตเองของ Grand House"
+                />
+              </Panel>}
+            </>
+          )}
+          {inventoryTab === "materials" && (
+            <>
+              <Panel title="รับเข้าวัตถุดิบและบรรจุภัณฑ์" icon={Boxes}>
+                <form className="clean-form mini-form material-receive-form" onSubmit={submitMaterial}>
+                  <label>
+                    <span>เลือกรายการ</span>
+                    <input
+                      list="mat-active-list"
+                      value={matSearch}
+                      onChange={(e) => {
+                        setMatSearch(e.target.value);
+                        const idMatch = e.target.value.match(/\[(.*?)\]/)?.[1];
+                        const match = idMatch
+                          ? allMaterials.find((p) => p.id === idMatch)
+                          : allMaterials.find((p) => p.name === e.target.value);
+                        setMatProductId(match?.id || "");
+                        if (match) {
+                          setMatQty(match.unit === "กก." ? 0 : 1);
+                          setMatWeightKg(match.unit === "กก." ? 1 : 0);
+                        }
+                      }}
+                      placeholder="พิมพ์หรือเลือกรายการ"
+                    />
+                    <datalist id="mat-active-list">
+                      {allMaterials.map((p) => (
+                        <option key={p.id} value={`${p.name} [${p.id}]`} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <Select name="matBranch" label="สาขา" value={matBranch} onChange={(e) => setMatBranch(e.target.value as Branch)} options={branches.map((b) => [b, b])} />
+                  <Input
+                    name="matQty"
+                    label="จำนวน"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={matQty}
+                    disabled={selectedMaterialUsesWeight}
+                    onChange={(e) => setMatQty(Number(e.target.value))}
+                  />
+                  <Input
+                    name="matWeightKg"
+                    label="น้ำหนัก (กก.)"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={matWeightKg}
+                    disabled={!!selectedMaterial && !selectedMaterialUsesWeight}
+                    onChange={(e) => setMatWeightKg(Number(e.target.value))}
+                  />
+                  <Input name="matDate" label="วันที่รับ" type="date" value={matDate} onChange={(e) => setMatDate(e.target.value)} />
+                  <Input name="matExpiryDate" label="วันหมดอายุ" type="date" value={matExpiryDate} onChange={(e) => setMatExpiryDate(e.target.value)} />
+                  <button className="primary action" type="submit"><Save size={18} /> บันทึกรับ</button>
+                </form>
+              </Panel>
+              <Panel title={`คลังวัตถุดิบ ${materialCategory === "all" ? "ทั้งหมด" : materialCategory}`} icon={Boxes}>
+                <SimpleTable
+                  headers={["รหัส", "ชื่อ", "คงเหลือ", "หมวด", "วันที่รับ", "หมดอายุ"]}
+                  rows={materialInventoryRows(filteredMaterials)}
+                  empty={`ยังไม่มีรายการในหมวด ${materialCategory === "all" ? "นี้" : materialCategory}`}
+                />
+              </Panel>
+            </>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1276,7 +1735,7 @@ function Recipes({ state, commit, fail }: { state: AppState; commit: (next: AppS
       </div>
       <Panel title="บันทึกสูตรอาหารใหม่" icon={ChefHat}>
         <form className="clean-form recipe-form" onSubmit={submitRecipe}>
-          <Input name="recipeName" label="ชื่อสูตร" defaultValue="สูตรตัวอย่างใหม่" />
+          <Input name="recipeName" label="ชื่อสูตร" placeholder="เช่น สูตรเมนูใหม่" />
           <Select name="outputProductId" label="เมนูที่ผลิตได้" options={outputProducts.map((product) => [product.id, product.name])} />
           <Input name="outputQty" label="จำนวนที่ได้" type="number" step="0.01" defaultValue="10" />
           {ingredientRows.map((index, visibleIndex) => (
@@ -1366,39 +1825,106 @@ function StockCount({ state, commit, fail }: { state: AppState; commit: (next: A
 }
 
 function CashPage({ state, commit }: { state: AppState; commit: (next: AppState, message: string) => void }) {
+  const [expenseCategory, setExpenseCategory] = useState(expenseCategories[0]);
+  const [expenseProductId, setExpenseProductId] = useState("");
+  const rawMaterialOptions = state.products.filter((product) => product.active && product.type === "raw_material");
+  const packagingOptions = state.products.filter((product) => product.active && product.type === "packaging");
+  const stockExpenseProducts = expenseCategory === "ค่าวัตถุดิบ" ? rawMaterialOptions : expenseCategory === "ค่าบรรจุภัณฑ์" ? packagingOptions : [];
+  const requiresStockProduct = expenseCategory === "ค่าวัตถุดิบ" || expenseCategory === "ค่าบรรจุภัณฑ์";
+  const purchaseQtyLabel = expenseCategory === "ค่าสาธารณูปโภค" ? "หน่วย" : expenseCategory === "ค่าวัตถุดิบ" ? "น้ำหนัก (กก.)" : "จำนวนที่ซื้อ";
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const next = addCashEntry(state, {
-      date: String(form.get("date")),
-      branch: form.get("branch") as Branch,
-      type: form.get("type") as "รับเงิน" | "จ่ายเงิน",
-      category: String(form.get("category")),
-      amount: Number(form.get("amount")),
+    const purchaseQty = Number(form.get("purchaseQty"));
+    const amount = Number(form.get("amount"));
+    const category = String(form.get("category"));
+    const expenseDate = String(form.get("date"));
+    const expiryDate = String(form.get("expiryDate"));
+    const expenseProduct = productById(state.products, String(form.get("expenseProductId")));
+    if (requiresStockProduct && !expenseProduct) {
+      window.alert(category === "ค่าวัตถุดิบ" ? "กรุณาเลือกรายการวัตถุดิบ" : "กรุณาเลือกรายการบรรจุภัณฑ์");
+      return;
+    }
+    if (requiresStockProduct && purchaseQty <= 0) {
+      window.alert(category === "ค่าวัตถุดิบ" ? "กรุณากรอกน้ำหนักกิโลกรัม" : "กรุณากรอกจำนวนที่ซื้อ");
+      return;
+    }
+    if (requiresStockProduct && !expiryDate) {
+      window.alert("กรุณาเลือกวันหมดอายุ");
+      return;
+    }
+    const cashState = addCashEntry(state, {
+      date: expenseDate,
+      branch: "บ้านโจ้",
+      type: "จ่ายเงิน",
+      category,
+      purchaseQty,
+      paymentChannel: form.get("paymentChannel") as PaymentChannel,
+      expenseProductId: expenseProduct?.id,
+      amount,
       note: String(form.get("note")),
     });
+    const next = requiresStockProduct && expenseProduct
+      ? receiveLot(cashState, {
+          productId: expenseProduct.id,
+          branch: "บ้านโจ้",
+          quantity: purchaseQty,
+          unitCost: purchaseQty > 0 ? amount / purchaseQty : 0,
+          receivedDate: expenseDate,
+          expiryDate,
+          supplier: "Grand House",
+          note: `${category} ${expenseProduct.name}`,
+          recordCash: false,
+        })
+      : cashState;
     event.currentTarget.reset();
-    commit(next, "บันทึกเงินแล้ว");
+    setExpenseCategory(expenseCategories[0]);
+    setExpenseProductId("");
+    commit(next, requiresStockProduct ? "บันทึกค่าใช้จ่ายและรับเข้าคลังแล้ว" : "บันทึกค่าใช้จ่ายแล้ว");
   }
   return (
     <section className="stack">
-      <Panel title="บันทึกเงินสดและค่าใช้จ่าย" icon={WalletCards}>
-        <form className="clean-form" onSubmit={submit}>
+      <Panel title="บันทึกค่าใช้จ่าย" icon={WalletCards}>
+        <form className="clean-form expense-form" onSubmit={submit}>
           <Input name="date" label="วันที่" type="date" defaultValue={today} />
-          <Select name="branch" label="สาขา" options={branches.map((branch) => [branch, branch])} />
-          <Select name="type" label="ประเภท" options={[["รับเงิน", "รับเงิน"], ["จ่ายเงิน", "จ่ายเงิน"]]} />
-          <Input name="category" label="หมวด" defaultValue="ยอดขายจริง" />
-          <Input name="amount" label="จำนวนเงิน" type="number" defaultValue="1000" />
-          <Input name="note" label="หมายเหตุ" defaultValue="บันทึกยอดประจำวัน" />
+          <Select
+            name="category"
+            label="ประเภท"
+            value={expenseCategory}
+            onChange={(event) => {
+              setExpenseCategory(event.target.value);
+              setExpenseProductId("");
+            }}
+            options={expenseCategories.map((category) => [category, category])}
+          />
+          {requiresStockProduct && (
+            <Select
+              name="expenseProductId"
+              label={expenseCategory === "ค่าวัตถุดิบ" ? "รายการวัตถุดิบ" : "รายการบรรจุภัณฑ์"}
+              value={expenseProductId}
+              onChange={(event) => setExpenseProductId(event.target.value)}
+              options={[["", "เลือกรายการ"], ...stockExpenseProducts.map((product) => [product.id, product.name] as [string, string])]}
+            />
+          )}
+          <Input name="purchaseQty" label={purchaseQtyLabel} type="number" step="0.01" defaultValue="1" />
+          {requiresStockProduct && <Input name="expiryDate" label="วันหมดอายุ" type="date" defaultValue={today} />}
+          <Select name="paymentChannel" label="การจ่ายเงิน" options={expensePaymentChannels.map((channel) => [channel, channel])} />
+          <Input name="amount" label="จำนวนเงิน" type="number" step="0.01" defaultValue="0" />
+          <Input name="note" label="อื่นๆ" placeholder="พิมพ์โน้ตเพิ่มเติม" />
           <button className="primary action" type="submit">
-            <Save size={18} /> บันทึกเงิน
+            <Save size={18} /> บันทึกค่าใช้จ่าย
           </button>
         </form>
       </Panel>
-      <Panel title="รายการเงินล่าสุด" icon={Landmark}>
+      <Panel title="รายการค่าใช้จ่ายล่าสุด" icon={Landmark}>
         <SimpleTable
-          headers={["วันที่", "สาขา", "ประเภท", "หมวด", "จำนวน", "หมายเหตุ"]}
-          rows={state.cashEntries.slice(-12).reverse().map((entry) => [entry.date, entry.branch, entry.type, entry.category, money(entry.amount), entry.note])}
+          headers={["วันที่", "ประเภท", "รายการ", "จำนวนที่ซื้อ", "การจ่ายเงิน", "จำนวนเงิน", "อื่นๆ"]}
+          rows={state.cashEntries
+            .filter((entry) => entry.type === "จ่ายเงิน")
+            .slice(-12)
+            .reverse()
+            .map((entry) => [entry.date, entry.category, productById(state.products, entry.expenseProductId || "")?.name || "-", entry.purchaseQty ?? "-", entry.paymentChannel || "-", money(entry.amount), entry.note || "-"])}
         />
       </Panel>
     </section>

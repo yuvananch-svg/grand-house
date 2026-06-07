@@ -20,6 +20,8 @@ export interface Product {
   category: string;
   unit: string;
   salePrice?: number;
+  standardCost?: number;
+  costStartDate?: string;
   supplier?: string;
   active: boolean;
 }
@@ -144,6 +146,9 @@ export interface CashEntry {
   branch: Branch;
   type: CashType;
   category: string;
+  purchaseQty?: number;
+  paymentChannel?: PaymentChannel;
+  expenseProductId?: string;
   amount: number;
   note: string;
   linkedId?: string;

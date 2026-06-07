@@ -1,0 +1,130 @@
+
+> dev
+> vite --host 0.0.0.0
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+Port 5173 is in use, trying another one...
+
+  VITE v5.4.21  ready in 137 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: http://192.168.1.36:5174/
+10:54:09 PM [vite] hmr update /src/App.tsx
+10:54:21 PM [vite] hmr update /src/styles.css
+10:54:37 PM [vite] hmr update /src/App.tsx
+10:58:07 PM [vite] hmr update /src/App.tsx
+10:58:23 PM [vite] hmr update /src/styles.css
+10:58:45 PM [vite] hmr update /src/App.tsx
+10:59:01 PM [vite] hmr update /src/App.tsx
+10:59:11 PM [vite] hmr update /src/styles.css
+10:59:14 PM [vite] hmr update /src/App.tsx
+11:01:12 PM [vite] hmr update /src/App.tsx
+11:01:31 PM [vite] hmr update /src/App.tsx
+11:03:20 PM [vite] hmr update /src/App.tsx
+11:03:49 PM [vite] hmr update /src/App.tsx
+11:11:08 PM [vite] hmr update /src/styles.css
+11:12:08 PM [vite] hmr update /src/App.tsx
+11:12:36 PM [vite] hmr update /src/App.tsx
+11:16:03 PM [vite] hmr update /src/App.tsx
+11:16:35 PM [vite] hmr update /src/App.tsx
+11:20:00 PM [vite] hmr update /src/App.tsx
+11:20:17 PM [vite] hmr update /src/App.tsx
+11:20:24 PM [vite] hmr update /src/App.tsx
+11:20:24 PM [vite] Internal server error: /Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/src/App.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (1465:14)
+
+  1463 |                 />
+  1464 |               </Panel>
+> 1465 |               <Panel title="ผลิตสินค้า Grand House" icon={Factory}>
+       |               ^
+  1466 |                 <form className="clean-form mini-form" onSubmit={submitHouseProduce}>
+  1467 |                   <label>
+  1468 |                     <span>เลือกสินค้า</span>
+  Plugin: vite:react-babel
+  File: /Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/src/App.tsx:1465:14
+  1463|                  />
+  1464|                </Panel>
+  1465|                <Panel title="ผลิตสินค้า Grand House" icon={Factory}>
+     |                ^
+  1466|                  <form className="clean-form mini-form" onSubmit={submitHouseProduce}>
+  1467|                    <label>
+      at constructor (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:365:19)
+      at TypeScriptParserMixin.raise (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:6616:19)
+      at TypeScriptParserMixin.jsxParseElementAt (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4754:18)
+      at TypeScriptParserMixin.jsxParseElement (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOpBaseRightExpr (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11003:34)
+      at TypeScriptParserMixin.parseExprOpRightExpr (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10998:21)
+      at TypeScriptParserMixin.parseExprOp (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10964:27)
+      at TypeScriptParserMixin.parseExprOp (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9323:18)
+      at TypeScriptParserMixin.parseExprOps (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10925:17)
+      at TypeScriptParserMixin.parseMaybeConditional (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:12443:12)
+      at TypeScriptParserMixin.parseExpression (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10797:17)
+      at TypeScriptParserMixin.jsxParseExpressionContainer (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4644:31)
+      at TypeScriptParserMixin.jsxParseElementAt (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4723:36)
+      at TypeScriptParserMixin.jsxParseElement (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9792:39
+      at TypeScriptParserMixin.tryParse (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9792:18)
+      at /Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOpBaseRightExpr (/Users/yuvananchan-arkat/Desktop/ไม่มีชื่อโฟลเดอร์ 2/node_modules/@babel/parser/lib/index.js:11003:34)
+11:20:46 PM [vite] hmr update /src/App.tsx
+11:21:19 PM [vite] hmr update /src/styles.css
+11:21:32 PM [vite] hmr update /src/App.tsx
+11:21:37 PM [vite] hmr update /src/styles.css
+11:24:55 PM [vite] hmr update /src/App.tsx
+11:27:47 PM [vite] hmr update /src/App.tsx
+11:27:54 PM [vite] hmr update /src/App.tsx
+11:28:00 PM [vite] hmr update /src/App.tsx
+11:29:53 PM [vite] hmr update /src/App.tsx
+11:33:04 PM [vite] hmr update /src/styles.css
+11:33:21 PM [vite] hmr update /src/styles.css
+11:33:33 PM [vite] hmr update /src/styles.css
+11:33:41 PM [vite] hmr update /src/styles.css
+11:38:22 PM [vite] hmr update /src/App.tsx
+11:38:33 PM [vite] hmr update /src/App.tsx
+11:38:56 PM [vite] hmr update /src/styles.css
+11:39:04 PM [vite] hmr update /src/App.tsx
+11:39:18 PM [vite] hmr update /src/styles.css
+11:40:08 PM [vite] hmr update /src/styles.css
+11:41:11 PM [vite] hmr update /src/styles.css
+11:44:18 PM [vite] hmr update /src/App.tsx
+11:44:41 PM [vite] hmr update /src/App.tsx
+11:46:55 PM [vite] hmr update /src/App.tsx
+11:47:09 PM [vite] hmr update /src/styles.css
+11:51:47 PM [vite] hmr update /src/App.tsx
+11:52:17 PM [vite] hmr update /src/App.tsx
+11:52:32 PM [vite] hmr update /src/App.tsx
+11:53:03 PM [vite] hmr update /src/App.tsx
+11:53:19 PM [vite] hmr update /src/App.tsx
+11:56:06 PM [vite] hmr update /src/App.tsx
+11:56:23 PM [vite] hmr update /src/styles.css

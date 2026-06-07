@@ -22,7 +22,7 @@ import type {
   TaxSettings,
 } from "./types";
 
-const STORAGE_KEY = "grand-house-prototype-state-v1";
+const STORAGE_KEY = "grand-house-prototype-state-v2-empty";
 export const today = "2026-06-03";
 const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
 
@@ -224,6 +224,7 @@ export function receiveLot(
     expiryDate: string;
     supplier: string;
     note: string;
+    recordCash?: boolean;
   },
 ): AppState {
   const lot: InventoryLot = {
@@ -239,18 +240,20 @@ export function receiveLot(
     supplier: input.supplier,
     note: input.note,
   };
-  const cash: CashEntry = {
-    id: nextId("CASH", state.cashEntries),
-    date: input.receivedDate,
-    branch: input.branch,
-    type: "จ่ายเงิน",
-    category: "ซื้อเข้า",
-    amount: input.quantity * input.unitCost,
-    note: input.note || `รับสินค้าเข้า ${lot.id}`,
-    linkedId: lot.id,
-  };
+  const cash: CashEntry | null = input.recordCash === false
+    ? null
+    : {
+        id: nextId("CASH", state.cashEntries),
+        date: input.receivedDate,
+        branch: input.branch,
+        type: "จ่ายเงิน",
+        category: "ซื้อเข้า",
+        amount: input.quantity * input.unitCost,
+        note: input.note || `รับสินค้าเข้า ${lot.id}`,
+        linkedId: lot.id,
+      };
   return withAudit(
-    { ...state, lots: [...state.lots, lot], cashEntries: [...state.cashEntries, cash] },
+    { ...state, lots: [...state.lots, lot], cashEntries: cash ? [...state.cashEntries, cash] : state.cashEntries },
     {
       date: input.receivedDate,
       branch: input.branch,
@@ -485,7 +488,9 @@ export function createProduct(
     category: string;
     unit: string;
     salePrice: number;
-    supplier: string;
+    standardCost?: number;
+    costStartDate?: string;
+    supplier?: string;
   },
 ): { state: AppState; error?: string } {
   if (!input.name.trim()) return { state, error: "กรุณากรอกชื่อสินค้า" };
@@ -494,27 +499,39 @@ export function createProduct(
   if ((input.type === "purchased_finished_good" || input.type === "produced_finished_good") && input.salePrice <= 0) {
     return { state, error: "เมนูขายต้องมีราคาขายมากกว่า 0" };
   }
-  const duplicate = state.products.some((product) => product.name.trim() === input.name.trim() && product.type === input.type);
-  if (duplicate) return { state, error: "มีรายการชื่อนี้อยู่แล้ว" };
+  if (input.standardCost !== undefined && input.standardCost < 0) return { state, error: "ต้นทุนต้องไม่ติดลบ" };
+  const normalizedName = input.name.trim();
+  const costStartDate = input.costStartDate?.trim() || today;
+  const exactDuplicate = state.products.some(
+    (product) =>
+      product.name.trim() === normalizedName &&
+      product.type === input.type &&
+      (product.standardCost || 0) === (input.standardCost || 0) &&
+      (product.costStartDate || today) === costStartDate,
+  );
+  if (exactDuplicate) return { state, error: "มีรายการชื่อนี้ ต้นทุนนี้ และวันที่นี้อยู่แล้ว" };
   const product: Product = {
-    id: nextProductId(input.type, state.products),
-    name: input.name.trim(),
+    id: nextProductId(input.type, input.supplier, state.products),
+    name: normalizedName,
     type: input.type,
     category: input.category.trim(),
     unit: input.unit.trim(),
     salePrice: input.type === "raw_material" || input.type === "packaging" ? undefined : input.salePrice,
-    supplier: input.supplier.trim() || undefined,
+    standardCost: input.standardCost,
+    costStartDate,
+    supplier: input.supplier?.trim() || undefined,
     active: true,
   };
+  const products = state.products.map((item) => (item.name.trim() === normalizedName && item.type === input.type ? { ...item, active: false } : item));
   return {
     state: withAudit(
-      { ...state, products: [...state.products, product] },
+      { ...state, products: [...products, product] },
       {
         date: today,
         action: "เพิ่มสินค้า",
         targetType: "PRODUCT",
         targetId: product.id,
-        detail: `${product.name} ประเภท ${product.type}`,
+        detail: `${product.name} ประเภท ${product.type} ต้นทุน ${input.standardCost || 0} เริ่ม ${costStartDate}`,
       },
     ),
   };
@@ -537,14 +554,32 @@ export function setProductActive(state: AppState, productId: string, active: boo
   );
 }
 
-function nextProductId(type: ProductType, products: Product[]) {
+export function deleteProduct(state: AppState, productId: string): AppState {
+  const product = productById(state.products, productId);
+  return withAudit(
+    {
+      ...state,
+      products: state.products.filter((item) => item.id !== productId),
+    },
+    {
+      date: today,
+      action: "ลบสินค้า",
+      targetType: "PRODUCT",
+      targetId: productId,
+      detail: product?.name || productId,
+    },
+  );
+}
+
+function nextProductId(type: ProductType, supplier: string | undefined, products: Product[]) {
   const prefixByType: Record<ProductType, string> = {
     raw_material: "RM",
     packaging: "PK",
-    purchased_finished_good: "PROD",
-    produced_finished_good: "PROD",
+    purchased_finished_good: "PTG",
+    produced_finished_good: "PGH",
   };
-  const prefix = prefixByType[type];
+  const source = supplier?.trim();
+  const prefix = source === "The Grand's" ? "PTG" : source === "Grand House" ? "PGH" : prefixByType[type];
   const next =
     products
       .map((product) => Number(product.id.replace(`${prefix}-`, "")))
@@ -555,7 +590,7 @@ function nextProductId(type: ProductType, products: Product[]) {
 
 export function addCashEntry(
   state: AppState,
-  input: { date: string; branch: Branch; type: "รับเงิน" | "จ่ายเงิน"; category: string; amount: number; note: string },
+  input: { date: string; branch: Branch; type: "รับเงิน" | "จ่ายเงิน"; category: string; purchaseQty?: number; paymentChannel?: PaymentChannel; expenseProductId?: string; amount: number; note: string },
 ) {
   const entry: CashEntry = { id: nextId("CASH", state.cashEntries), ...input };
   return withAudit(
