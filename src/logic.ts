@@ -22,7 +22,7 @@ import type {
   TaxSettings,
 } from "./types";
 
-const STORAGE_KEY = "grand-house-prototype-state-v2-empty";
+const STORAGE_KEY = "grand-house-prototype-state-v3-seed";
 export const today = "2026-06-03";
 const paymentChannels: PaymentChannel[] = ["QR1", "QR2", "ไทยช่วยไทย", "เงินสด", "online(grab)", "อื่นๆ"];
 
@@ -162,11 +162,11 @@ export function cashOut(state: AppState) {
   return state.cashEntries.filter((entry) => entry.type === "จ่ายเงิน").reduce((sum, entry) => sum + entry.amount, 0);
 }
 
-export function recipeCost(state: AppState, recipe: Recipe) {
+export function recipeCost(state: AppState, recipe: Recipe, branch?: Branch) {
   let total = 0;
   let missing: string[] = [];
   for (const ingredient of recipe.ingredients) {
-    const lots = activeLots(state, (lot) => lot.productId === ingredient.productId && !isExpired(lot)).sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+    const lots = activeLots(state, (lot) => lot.productId === ingredient.productId && !isExpired(lot) && (!branch || lot.branch === branch)).sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
     let need = ingredient.quantity;
     for (const lot of lots) {
       if (need <= 0) break;
@@ -272,8 +272,10 @@ export function produceBatch(
   const recipe = state.recipes.find((item) => item.id === input.recipeId);
   if (!recipe) return { state, error: "ไม่พบสูตรอาหาร" };
   const multiplier = input.producedQty / recipe.outputQty;
+  const batchId = nextId("BATCH", state.batches);
   const lots = state.lots.map((lot) => ({ ...lot }));
   let totalCost = 0;
+  const movements: InventoryMovement[] = [];
 
   for (const ingredient of recipe.ingredients) {
     let need = ingredient.quantity * multiplier;
@@ -284,8 +286,21 @@ export function produceBatch(
       if (need <= 0) break;
       const take = Math.min(need, lot.remaining);
       lot.remaining -= take;
-      totalCost += take * lot.unitCost;
+      const value = take * lot.unitCost;
+      totalCost += value;
       need -= take;
+      movements.push({
+        id: nextId("MOVE", [...state.movements, ...movements]),
+        date: input.productionDate,
+        branch: input.branch,
+        lotId: lot.id,
+        productId: ingredient.productId,
+        type: "ผลิต",
+        quantityChange: -take,
+        valueChange: -value,
+        linkedId: batchId,
+        note: `ใช้วัตถุดิบผลิต ${recipe.name}`,
+      });
     }
     if (need > 0.0001) {
       const product = productById(state.products, ingredient.productId);
@@ -306,7 +321,7 @@ export function produceBatch(
     note: recipe.name,
   };
   const batch: ProductionBatch = {
-    id: nextId("BATCH", state.batches),
+    id: batchId,
     recipeId: recipe.id,
     branch: input.branch,
     producedQty: input.producedQty,
@@ -325,9 +340,21 @@ export function produceBatch(
     note: `ผลิต ${recipe.name} เป็น ${outputLot.id}`,
     linkedId: batch.id,
   };
+  const outputMovement: InventoryMovement = {
+    id: nextId("MOVE", [...state.movements, ...movements]),
+    date: input.productionDate,
+    branch: input.branch,
+    lotId: outputLot.id,
+    productId: outputLot.productId,
+    type: "ผลิต",
+    quantityChange: input.producedQty,
+    valueChange: totalCost,
+    linkedId: batch.id,
+    note: `รับสินค้าผลิตเสร็จ ${recipe.name}`,
+  };
   return {
     state: withAudit(
-      { ...state, lots: [...lots, outputLot], batches: [...state.batches, batch], cashEntries: [...state.cashEntries, transfer] },
+      { ...state, lots: [...lots, outputLot], batches: [...state.batches, batch], cashEntries: [...state.cashEntries, transfer], movements: [...state.movements, ...movements, outputMovement] },
       {
         date: input.productionDate,
         branch: input.branch,

@@ -4,6 +4,7 @@ import {
   Boxes,
   Calculator,
   ChefHat,
+  ChevronDown,
   ClipboardCheck,
   CreditCard,
   Download,
@@ -48,7 +49,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { branches, productTypeLabel } from "./data";
+import { branches } from "./data";
 import {
   activeLots,
   addCashEntry,
@@ -105,7 +106,6 @@ type Page =
   | "inventory"
 
   | "expiry"
-  | "recipes"
   | "count"
   | "cash"
   | "closeShift"
@@ -118,13 +118,12 @@ const pageItems: { id: Page; label: string; icon: typeof BarChart3; roles?: Role
   { id: "dashboard", label: "ภาพรวม", icon: BarChart3, roles: ["owner", "backoffice"] },
   { id: "pos", label: "ขายหน้าร้าน", icon: CreditCard, roles: ["owner", "staff"] },
   { id: "products", label: "สินค้า", icon: PackagePlus, roles: ["owner"] },
+  { id: "inventory", label: "คลัง", icon: Boxes, roles: ["owner", "staff", "backoffice"] },
+  { id: "cash", label: "ค่าใช้จ่าย", icon: WalletCards, roles: ["owner", "backoffice"] },
   { id: "dailySales", label: "ยอดขายวันนี้", icon: BarChart3, roles: ["owner", "staff", "backoffice"] },
   { id: "salesHistory", label: "บิลขาย", icon: ReceiptText, roles: ["owner", "backoffice"] },
-  { id: "inventory", label: "คลัง", icon: Boxes, roles: ["owner", "staff", "backoffice"] },
   { id: "expiry", label: "แจ้งเตือนหมดอายุ", icon: ShieldAlert, roles: ["owner", "staff"] },
-  { id: "recipes", label: "สูตร / ต้นทุนเมนู", icon: ChefHat, roles: ["owner", "staff", "backoffice"] },
   { id: "count", label: "นับสต็อก", icon: ClipboardCheck, roles: ["owner", "staff", "backoffice"] },
-  { id: "cash", label: "ค่าใช้จ่าย", icon: WalletCards, roles: ["owner", "backoffice"] },
   { id: "closeShift", label: "ปิดกะ", icon: FileCheck2, roles: ["owner", "staff"] },
   { id: "financial", label: "งบและภาษี", icon: Download, roles: ["owner"] },
   { id: "reconcile", label: "ตรวจยอดปิดวัน", icon: Calculator, roles: ["owner"] },
@@ -332,7 +331,6 @@ export function App() {
         {page === "salesHistory" && <SalesHistoryPage state={state} commit={commit} fail={fail} />}
         {page === "inventory" && <Inventory state={state} commit={commit} fail={fail} />}
         {page === "expiry" && <ExpiryCenter state={state} commit={commit} fail={fail} />}
-        {page === "recipes" && <Recipes state={state} commit={commit} fail={fail} />}
         {page === "count" && <StockCount state={state} commit={commit} fail={fail} />}
         {page === "cash" && <CashPage state={state} commit={commit} />}
         {page === "closeShift" && <CloseShiftPage state={state} commit={commit} />}
@@ -1060,6 +1058,8 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
   const [productSearch, setProductSearch] = useState("");
   const [supplierTab, setSupplierTab] = useState<"The Grand's" | "Grand House">("The Grand's");
   const [productTypeTab, setProductTypeTab] = useState<"สินค้า" | "วัตถุดิบ">("สินค้า");
+  const [masterTab, setMasterTab] = useState<"สินค้า" | "สูตรอาหาร">("สินค้า");
+  const [houseBranchFilter, setHouseBranchFilter] = useState<Branch | "all">("all");
 
   const normalizedSearch = productSearch.trim().toLowerCase();
   const productNameOptions = useMemo(() => [...new Set(state.products.map((product) => product.name.trim()).filter(Boolean))].sort(), [state.products]);
@@ -1095,25 +1095,75 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
     commit(deleteProduct(state, product.id), "ลบสินค้าแล้ว");
   }
 
-  function productTableRows(products: Product[], showSalePrice = true) {
-    return products.map((product) => [
+  function productLotAverageCostDisplay(product: Product, branchFilter?: Branch | "all") {
+    if (!branchFilter || branchFilter === "all") return "เลือกสาขา";
+    const lots = activeLots(state, (lot) => lot.productId === product.id && lot.branch === branchFilter && lotStatus(lot) !== "หมดอายุ");
+    const remaining = lots.reduce((sum, lot) => sum + lot.remaining, 0);
+    if (remaining <= 0) return "-";
+    const value = lots.reduce((sum, lot) => sum + lot.remaining * lot.unitCost, 0);
+    return money(value / remaining);
+  }
+
+  function productDisplayCost(product: Product, mode: "standard" | "recipe" | "lotAverage" = "standard", branchFilter?: Branch | "all") {
+    if (mode === "recipe") {
+      const recipe = state.recipes.find((item) => item.outputProductId === product.id);
+      if (!recipe) return "-";
+      if (branchFilter === "all") return "เลือกสาขา";
+      return money(recipeCost(state, recipe, branchFilter).perUnit);
+    }
+    if (mode === "lotAverage") return productLotAverageCostDisplay(product, branchFilter);
+    return product.standardCost !== undefined ? money(product.standardCost) : "-";
+  }
+
+  function productStockDisplay(product: Product, branchFilter: Branch | "all") {
+    const lots = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ" && (branchFilter === "all" || lot.branch === branchFilter));
+    const remaining = lots.reduce((sum, lot) => sum + lot.remaining, 0);
+    return `${number(remaining, 2)} ${product.unit}`;
+  }
+
+  function productTableRows(
+    products: Product[],
+    showSalePrice = true,
+    costMode: "standard" | "recipe" | "lotAverage" = "standard",
+    branchFilter?: Branch | "all",
+  ) {
+    return products.map((product) => {
+      const cells: React.ReactNode[] = [
       product.id,
       product.name,
       product.category,
       showSalePrice ? (product.salePrice ? money(product.salePrice) : "-") : product.unit,
-      product.standardCost !== undefined ? money(product.standardCost) : "-",
+      productDisplayCost(product, costMode, branchFilter),
       shortDate(product.costStartDate),
+      ];
+      if (branchFilter) cells.push(productStockDisplay(product, branchFilter));
+      cells.push(
       <button key={`${product.id}-status`} className={product.active ? "status-toggle active" : "status-toggle inactive"} onClick={() => toggleProduct(product.id, !product.active)}>
         {product.active ? "ใช้งาน" : "ปิดใช้งาน"}
       </button>,
       <button key={`${product.id}-delete`} className="icon-button danger-soft" type="button" onClick={() => removeProduct(product)} aria-label={`ลบ ${product.name}`}>
         <Trash2 size={18} />
       </button>,
-    ]);
+      );
+      return cells;
+    });
   }
 
   return (
     <section className="stack">
+      <div className="filter-row master-data-tabs">
+        <button className={masterTab === "สินค้า" ? "chip active" : "chip"} onClick={() => setMasterTab("สินค้า")}>
+          <PackagePlus size={16} /> สินค้า
+        </button>
+        <button className={masterTab === "สูตรอาหาร" ? "chip active" : "chip"} onClick={() => setMasterTab("สูตรอาหาร")}>
+          <ChefHat size={16} /> สูตรอาหาร
+        </button>
+      </div>
+
+      {masterTab === "สูตรอาหาร" && <Recipes state={state} commit={commit} fail={fail} />}
+
+      {masterTab === "สินค้า" && (
+        <>
       <Panel title="ค้นหารายการสินค้า" icon={Search}>
         <label className="product-search">
           <span>ค้นหาจากชื่อสินค้า/เมนู</span>
@@ -1134,11 +1184,21 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
           </button>
         </div>
         {supplierTab === "Grand House" && (
-          <div className="filter-row" style={{ marginTop: 8 }}>
-            <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>ประเภท:</span>
-            <button className={productTypeTab === "สินค้า" ? "chip active" : "chip"} onClick={() => setProductTypeTab("สินค้า")}>สินค้า / เมนู</button>
-            <button className={productTypeTab === "วัตถุดิบ" ? "chip active" : "chip"} onClick={() => setProductTypeTab("วัตถุดิบ")}>วัตถุดิบ</button>
-          </div>
+          <>
+            <div className="filter-row" style={{ marginTop: 8 }}>
+              <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>สาขา:</span>
+              {(["all", ...branches] as const).map((branch) => (
+                <button key={branch} className={houseBranchFilter === branch ? "chip active" : "chip"} onClick={() => setHouseBranchFilter(branch)}>
+                  {branch === "all" ? "ทุกสาขา" : branch}
+                </button>
+              ))}
+            </div>
+            <div className="filter-row" style={{ marginTop: 8 }}>
+              <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>ประเภท:</span>
+              <button className={productTypeTab === "สินค้า" ? "chip active" : "chip"} onClick={() => setProductTypeTab("สินค้า")}>สินค้า / เมนู</button>
+              <button className={productTypeTab === "วัตถุดิบ" ? "chip active" : "chip"} onClick={() => setProductTypeTab("วัตถุดิบ")}>วัตถุดิบ</button>
+            </div>
+          </>
         )}
       </Panel>
 
@@ -1173,7 +1233,7 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
             <Select name="category" label="หมวด" defaultValue="ข้าวกล่อง" options={productCategories.map((category) => [category, category])} />
             <input type="hidden" name="unit" value="จาน" />
             <Input name="salePrice" label="ราคาขาย" type="number" step="0.01" defaultValue="0" />
-            <Input name="standardCost" label="ต้นทุนต่อหน่วย" type="number" step="0.01" defaultValue="0" />
+            <input type="hidden" name="standardCost" value="0" />
             <Input name="costStartDate" label="วันที่เริ่มใช้ต้นทุน" type="date" defaultValue={today} />
             <input type="hidden" name="supplier" value="Grand House" />
             <button className="primary action" type="submit">
@@ -1181,8 +1241,8 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
             </button>
           </form>
           <SimpleTable
-            headers={["รหัส", "ชื่อเมนู", "หมวด", "ราคาขาย", "ต้นทุน", "เริ่มใช้", "สถานะ", "จัดการ"]}
-            rows={productTableRows(houseMenuProducts)}
+            headers={["รหัส", "ชื่อเมนู", "หมวด", "ราคาขาย", "ต้นทุน", "เริ่มใช้", "คงเหลือ", "สถานะ", "จัดการ"]}
+            rows={productTableRows(houseMenuProducts, true, "recipe", houseBranchFilter)}
             empty={normalizedSearch ? "ไม่พบเมนูจาก Grand House ตามคำค้นหา" : "ยังไม่มีเมนูจาก Grand House"}
           />
         </Panel>
@@ -1203,11 +1263,13 @@ function ProductsPage({ state, commit, fail }: { state: AppState; commit: (next:
             </button>
           </form>
           <SimpleTable
-            headers={["รหัส", "ชื่อวัตถุดิบ", "หมวด", "หน่วย", "ต้นทุน", "เริ่มใช้", "สถานะ", "จัดการ"]}
-            rows={productTableRows(houseRawMaterials, false)}
+            headers={["รหัส", "ชื่อวัตถุดิบ", "หมวด", "หน่วย", "ต้นทุน", "เริ่มใช้", "คงเหลือ", "สถานะ", "จัดการ"]}
+            rows={productTableRows(houseRawMaterials, false, "lotAverage", houseBranchFilter)}
             empty={normalizedSearch ? "ไม่พบวัตถุดิบตามคำค้นหา" : "ยังไม่มีวัตถุดิบ"}
           />
         </Panel>
+      )}
+        </>
       )}
     </section>
   );
@@ -1248,6 +1310,7 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
   const [matBranch, setMatBranch] = useState<Branch>("บ้านโจ้");
   const [matQty, setMatQty] = useState(1);
   const [matWeightKg, setMatWeightKg] = useState(0);
+  const [matAmount, setMatAmount] = useState(0);
   const [matDate, setMatDate] = useState(today);
   const [matExpiryDate, setMatExpiryDate] = useState(today);
 
@@ -1266,8 +1329,7 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
     return sourceProducts.map((product) => {
       const cells: React.ReactNode[] = [product.id, product.name];
       if (showStock) {
-        const remaining = state.lots
-          .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+        const remaining = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ" && (selectedBranch === "all" || lot.branch === selectedBranch))
           .reduce((sum, lot) => sum + lot.remaining, 0);
         cells.push(number(remaining, 2));
       }
@@ -1278,18 +1340,17 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
         cells.push(shortDate(product.costStartDate));
       }
       if (showLotDate) {
-        const latestLot = state.lots
-          .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+        const latestLot = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ" && (selectedBranch === "all" || lot.branch === selectedBranch))
           .sort((a, b) => b.receivedDate.localeCompare(a.receivedDate))[0];
         cells.push(shortDate(latestLot?.receivedDate));
       }
-      const activeLots = state.lots.filter((lot) =>
+      const availableProductLots = activeLots(state, (lot) =>
         lot.productId === product.id &&
-        lot.remaining > 0 &&
+        lotStatus(lot) !== "หมดอายุ" &&
         (selectedBranch === "all" || lot.branch === selectedBranch)
       );
-      const nearestExpiry = activeLots.length > 0
-        ? activeLots.reduce((nearest, lot) => lot.expiryDate < nearest ? lot.expiryDate : nearest, activeLots[0].expiryDate)
+      const nearestExpiry = availableProductLots.length > 0
+        ? availableProductLots.reduce((nearest, lot) => lot.expiryDate < nearest ? lot.expiryDate : nearest, availableProductLots[0].expiryDate)
         : undefined;
       cells.push(shortDate(nearestExpiry));
       return cells;
@@ -1298,8 +1359,7 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
 
   function materialInventoryRows(sourceProducts: Product[]) {
     return sourceProducts.map((product) => {
-      const lots = state.lots
-        .filter((lot) => lot.productId === product.id && (selectedBranch === "all" || lot.branch === selectedBranch))
+      const lots = activeLots(state, (lot) => lot.productId === product.id && lotStatus(lot) !== "หมดอายุ" && (selectedBranch === "all" || lot.branch === selectedBranch))
         .sort((a, b) => b.receivedDate.localeCompare(a.receivedDate));
       const remaining = lots.reduce((sum, lot) => sum + lot.remaining, 0);
       const latestLot = lots[0];
@@ -1361,21 +1421,35 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
     const product = productById(state.products, matProductId);
     const quantity = product?.unit === "กก." ? matWeightKg : matQty;
     if (quantity <= 0) return fail(product?.unit === "กก." ? "กรุณากรอกน้ำหนักกิโลกรัม" : "กรุณากรอกจำนวน");
-    const next = receiveLot(state, {
+    if (matAmount <= 0) return fail("กรุณากรอกจำนวนเงินรวมเพื่อคำนวณต้นทุนต่อหน่วย");
+    const cashState = addCashEntry(state, {
+      date: matDate,
+      branch: matBranch,
+      type: "จ่ายเงิน",
+      category: product?.type === "packaging" ? "ค่าบรรจุภัณฑ์" : "ค่าวัตถุดิบ",
+      purchaseQty: quantity,
+      paymentChannel: "อื่นๆ",
+      expenseProductId: product?.id,
+      amount: matAmount,
+      note: `${product?.type === "packaging" ? "รับบรรจุภัณฑ์" : "รับวัตถุดิบ"} ${product?.name || ""}`,
+    });
+    const next = receiveLot(cashState, {
       productId: matProductId,
       branch: matBranch,
       quantity,
-      unitCost: product?.standardCost || 0,
+      unitCost: matAmount / quantity,
       receivedDate: matDate,
       expiryDate: matExpiryDate,
       supplier: "Grand House",
-      note: `${product?.type === "packaging" ? "รับบรรจุภัณฑ์" : "รับวัตถุดิบ"} ${number(quantity, 2)} ${product?.unit || "หน่วย"}`,
+      note: `${product?.type === "packaging" ? "รับบรรจุภัณฑ์" : "รับวัตถุดิบ"} ${number(quantity, 2)} ${product?.unit || "หน่วย"} รวม ${money(matAmount)}`,
+      recordCash: false,
     });
     commit(next, "รับเข้าคลังแล้ว");
     setMatProductId("");
     setMatSearch("");
     setMatQty(1);
     setMatWeightKg(0);
+    setMatAmount(0);
     setMatExpiryDate(today);
   }
 
@@ -1551,6 +1625,7 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
                     disabled={!!selectedMaterial && !selectedMaterialUsesWeight}
                     onChange={(e) => setMatWeightKg(Number(e.target.value))}
                   />
+                  <Input name="matAmount" label="จำนวนเงินรวม" type="number" step="0.01" min="0" value={matAmount} onChange={(e) => setMatAmount(Number(e.target.value))} />
                   <Input name="matDate" label="วันที่รับ" type="date" value={matDate} onChange={(e) => setMatDate(e.target.value)} />
                   <Input name="matExpiryDate" label="วันหมดอายุ" type="date" value={matExpiryDate} onChange={(e) => setMatExpiryDate(e.target.value)} />
                   <button className="primary action" type="submit"><Save size={18} /> บันทึกรับ</button>
@@ -1567,67 +1642,6 @@ function Inventory({ state, commit, fail }: { state: AppState; commit: (next: Ap
           )}
         </div>
       </div>
-    </section>
-  );
-}
-
-function GrandIssuePage({ state }: { state: AppState }) {
-  const grandLots = state.lots.filter((lot) => {
-    const product = productById(state.products, lot.productId);
-    return product?.supplier === "The Grand's" || lot.supplier === "The Grand's";
-  });
-  const grandProducts = state.products.filter((product) => product.supplier === "The Grand's");
-
-  return (
-    <section className="stack">
-      <Panel title="รายการสินค้าจากแกรนด์" icon={Store}>
-        <SimpleTable
-          headers={["รหัส", "สินค้า", "หมวด", "ราคาขาย", "สถานะ"]}
-          rows={grandProducts.map((product) => [
-            product.id,
-            product.name,
-            product.category,
-            product.salePrice ? money(product.salePrice) : "-",
-            <Badge key={product.id} status={product.active ? "ปกติ" : "ปิดใช้งาน"} />,
-          ])}
-          empty="ยังไม่มีสินค้าจากแกรนด์"
-        />
-      </Panel>
-      <Panel title="สรุปเบิก ขาย แถม เสีย เหลือ แยก LOT" icon={ClipboardCheck}>
-        <SimpleTable
-          headers={["สินค้า", "LOT", "สาขา", "เบิกมา", "ขาย", "แถม", "เสีย/ทิ้ง", "เหลือ", "ต้นทุนขาย", "รายได้", "กำไร"]}
-          rows={grandLots.map((lot) => {
-            const product = productById(state.products, lot.productId);
-            const saleRows = state.saleItems.filter((item) => item.lotId === lot.id);
-            const soldQty = saleRows.filter((item) => item.revenue > 0).reduce((sum, item) => sum + item.quantity, 0);
-            const freeQty = saleRows.filter((item) => item.revenue <= 0).reduce((sum, item) => sum + item.quantity, 0);
-            const wasteQty =
-              state.sessions.filter((session) => session.lotId === lot.id).reduce((sum, session) => sum + session.wasteQty, 0) +
-              Math.abs(state.adjustments.filter((adjustment) => adjustment.lotId === lot.id && adjustment.quantityChange < 0).reduce((sum, adjustment) => sum + adjustment.quantityChange, 0));
-            const revenue = saleRows.reduce((sum, item) => sum + item.revenue, 0);
-            const cost = saleRows.reduce((sum, item) => sum + item.costOfGoods, 0);
-            return [
-              product?.name || lot.productId,
-              lot.id,
-              lot.branch,
-              `${number(lot.quantityIn, 2)} ${product?.unit || ""}`,
-              number(soldQty, 2),
-              number(freeQty, 2),
-              number(wasteQty, 2),
-              `${number(lot.remaining, 2)} ${product?.unit || ""}`,
-              money(cost),
-              money(revenue),
-              money(revenue - cost),
-            ];
-          })}
-          empty="ยังไม่มี LOT ที่เบิกจากแกรนด์"
-        />
-      </Panel>
-      <Panel title="แนวทางปิดยอดรายวัน" icon={FileCheck2}>
-        <p className="plain-text">
-          สูตรตรวจยอดคือ เบิกมา = ขาย + แถม + เสีย/ทิ้ง + เหลือ/คืนแกรนด์ ถ้าตัวเลขไม่เท่ากันต้องตรวจบิล โปร และการนับของเหลือก่อนปิดวัน
-        </p>
-      </Panel>
     </section>
   );
 }
@@ -1666,21 +1680,8 @@ function Recipes({ state, commit, fail }: { state: AppState; commit: (next: AppS
   const rawProducts = state.products.filter((product) => product.type === "raw_material" || product.type === "packaging");
   const outputProducts = state.products.filter((product) => product.type === "produced_finished_good");
   const [ingredientRows, setIngredientRows] = useState([1, 2, 3]);
-
-  function submitBatch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const result = produceBatch(state, {
-      recipeId: String(form.get("recipeId")),
-      branch: form.get("branch") as Branch,
-      producedQty: Number(form.get("producedQty")),
-      productionDate: String(form.get("productionDate")),
-      expiryDate: String(form.get("expiryDate")),
-    });
-    if (result.error) return fail(result.error);
-    event.currentTarget.reset();
-    commit(result.state, "ผลิต batch แล้ว");
-  }
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<string[]>([]);
+  const [recipeBranch, setRecipeBranch] = useState<Branch>("บ้านโจ้");
 
   function submitRecipe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1714,24 +1715,32 @@ function Recipes({ state, commit, fail }: { state: AppState; commit: (next: AppS
     setIngredientRows((rows) => (rows.length <= 1 ? rows : rows.filter((row) => row !== rowId)));
   }
 
+  function toggleRecipe(recipeId: string) {
+    setExpandedRecipeIds((ids) => (ids.includes(recipeId) ? ids.filter((id) => id !== recipeId) : [...ids, recipeId]));
+  }
+
+  function ingredientCostDetails(productId: string, quantity: number) {
+    const lots = activeLots(state, (lot) => lot.productId === productId && lot.branch === recipeBranch && lotStatus(lot) !== "หมดอายุ" && lotStatus(lot) !== "ตัดเสีย").sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+    let need = quantity;
+    let cost = 0;
+    for (const lot of lots) {
+      if (need <= 0) break;
+      const take = Math.min(need, lot.remaining);
+      cost += take * lot.unitCost;
+      need -= take;
+    }
+    return { cost, missingQty: Math.max(0, need) };
+  }
+
   return (
     <section className="stack">
-      <div className="recipe-grid">
-        {state.recipes.map((recipe) => {
-          const cost = recipeCost(state, recipe);
-          const output = productById(state.products, recipe.outputProductId);
-          return (
-            <article className="recipe-card" key={recipe.id}>
-              <div>
-                <p className="eyebrow">{recipe.id}</p>
-                <h3>{recipe.name}</h3>
-                <p>ได้ {recipe.outputQty} {recipe.outputUnit} · สินค้า {output?.name}</p>
-              </div>
-              <strong>{money(cost.perUnit)} / กล่อง</strong>
-              {cost.missing.length > 0 && <span className="warning-text">ขาด: {cost.missing.join(", ")}</span>}
-            </article>
-          );
-        })}
+      <div className="filter-row">
+        <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>คำนวณต้นทุนสาขา:</span>
+        {branches.map((branch) => (
+          <button key={branch} className={recipeBranch === branch ? "chip active" : "chip"} onClick={() => setRecipeBranch(branch)}>
+            {branch}
+          </button>
+        ))}
       </div>
       <Panel title="บันทึกสูตรอาหารใหม่" icon={ChefHat}>
         <form className="clean-form recipe-form" onSubmit={submitRecipe}>
@@ -1755,18 +1764,70 @@ function Recipes({ state, commit, fail }: { state: AppState; commit: (next: AppS
           </button>
         </form>
       </Panel>
-      <Panel title="ผลิตอาหารเป็น batch" icon={Factory}>
-        <form className="clean-form" onSubmit={submitBatch}>
-          <Select name="recipeId" label="สูตรอาหาร" options={state.recipes.map((recipe) => [recipe.id, recipe.name])} />
-          <Select name="branch" label="สาขา" options={branches.map((branch) => [branch, branch])} />
-          <Input name="producedQty" label="จำนวนที่ผลิต" type="number" defaultValue="20" />
-          <Input name="productionDate" label="วันที่ผลิต" type="date" defaultValue={today} />
-          <Input name="expiryDate" label="วันหมดอายุ" type="date" defaultValue="2026-06-04" />
-          <button className="primary action" type="submit">
-            <Factory size={18} /> บันทึกการผลิต
-          </button>
-        </form>
-      </Panel>
+      {state.recipes.length > 0 && (
+        <div className="recipe-grid">
+          {state.recipes.map((recipe) => {
+            const cost = recipeCost(state, recipe, recipeBranch);
+            const output = productById(state.products, recipe.outputProductId);
+            const expanded = expandedRecipeIds.includes(recipe.id);
+            return (
+              <article
+                className={expanded ? "recipe-card expanded" : "recipe-card"}
+                key={recipe.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleRecipe(recipe.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleRecipe(recipe.id);
+                  }
+                }}
+              >
+                <div className="recipe-card-summary">
+                  <div className="recipe-main">
+                    <p className="eyebrow">{recipe.id}</p>
+                    <h3>{recipe.name}</h3>
+                    <p className="recipe-output">ได้ {recipe.outputQty} {recipe.outputUnit} · สินค้า {output?.name}</p>
+                  </div>
+                  <div className="recipe-cost-block">
+                    <strong>{money(cost.perUnit)} / กล่อง</strong>
+                  </div>
+                  <ChevronDown className="recipe-chevron" size={22} />
+                </div>
+                <div className={cost.missing.length > 0 ? "recipe-missing" : "recipe-missing placeholder"}>
+                  {cost.missing.length > 0 ? `ขาด: ${cost.missing.join(", ")}` : "พร้อมผลิต"}
+                </div>
+                {expanded && (
+                  <div className="recipe-detail">
+                    <ul>
+                      {recipe.ingredients.map((ingredient) => {
+                        const product = productById(state.products, ingredient.productId);
+                        const detail = ingredientCostDetails(ingredient.productId, ingredient.quantity);
+                        return (
+                          <li key={`${recipe.id}-${ingredient.productId}`}>
+                            <span>
+                              {product?.name || ingredient.productId} {number(ingredient.quantity, 2)} {ingredient.unit}
+                              {detail.missingQty > 0 ? ` · ขาด ${number(detail.missingQty, 2)} ${ingredient.unit}` : ""}
+                            </span>
+                            <b>{money(detail.cost)}</b>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className="recipe-detail-total">
+                      <span>ต้นทุนผลิตรวม</span>
+                      <b>{money(cost.total)}</b>
+                      <span>ต้นทุนต่อ {recipe.outputUnit}</span>
+                      <b>{money(cost.perUnit)}</b>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -1825,13 +1886,30 @@ function StockCount({ state, commit, fail }: { state: AppState; commit: (next: A
 }
 
 function CashPage({ state, commit }: { state: AppState; commit: (next: AppState, message: string) => void }) {
-  const [expenseCategory, setExpenseCategory] = useState(expenseCategories[0]);
-  const [expenseProductId, setExpenseProductId] = useState("");
+  const generalExpenseCategories = expenseCategories.filter((category) => category !== "ค่าวัตถุดิบ" && category !== "ค่าบรรจุภัณฑ์");
+  const stockExpenseCategories = ["ค่าวัตถุดิบ", "ค่าบรรจุภัณฑ์"];
   const rawMaterialOptions = state.products.filter((product) => product.active && product.type === "raw_material");
   const packagingOptions = state.products.filter((product) => product.active && product.type === "packaging");
-  const stockExpenseProducts = expenseCategory === "ค่าวัตถุดิบ" ? rawMaterialOptions : expenseCategory === "ค่าบรรจุภัณฑ์" ? packagingOptions : [];
-  const requiresStockProduct = expenseCategory === "ค่าวัตถุดิบ" || expenseCategory === "ค่าบรรจุภัณฑ์";
-  const purchaseQtyLabel = expenseCategory === "ค่าสาธารณูปโภค" ? "หน่วย" : expenseCategory === "ค่าวัตถุดิบ" ? "น้ำหนัก (กก.)" : "จำนวนที่ซื้อ";
+  const [expenseTab, setExpenseTab] = useState<"general" | "stockPurchases">("general");
+  const [expenseCategory, setExpenseCategory] = useState(generalExpenseCategories[0]);
+  const [expenseBranch, setExpenseBranch] = useState<Branch>("บ้านโจ้");
+  const [expenseListBranch, setExpenseListBranch] = useState<Branch | "all">("all");
+  const [stockCategory, setStockCategory] = useState<"ค่าวัตถุดิบ" | "ค่าบรรจุภัณฑ์">("ค่าวัตถุดิบ");
+  const [stockBranch, setStockBranch] = useState<Branch>("บ้านโจ้");
+  const [stockProductId, setStockProductId] = useState("");
+  const purchaseQtyLabel = expenseCategory === "ค่าสาธารณูปโภค" ? "หน่วย" : "จำนวนที่ซื้อ";
+  const stockProductOptions = stockCategory === "ค่าวัตถุดิบ" ? rawMaterialOptions : packagingOptions;
+  const selectedStockProduct = productById(state.products, stockProductId);
+  const stockQtyLabel = selectedStockProduct ? `จำนวนที่ซื้อ (${selectedStockProduct.unit})` : "จำนวนที่ซื้อ";
+  const visibleExpenseEntries = state.cashEntries
+    .filter((entry) => {
+      const matchesBranch = expenseListBranch === "all" || entry.branch === expenseListBranch;
+      const isStockPurchase = stockExpenseCategories.includes(entry.category);
+      const matchesTab = expenseTab === "stockPurchases" ? isStockPurchase : !isStockPurchase;
+      return entry.type === "จ่ายเงิน" && matchesBranch && matchesTab;
+    })
+    .slice(-12)
+    .reverse();
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1840,91 +1918,160 @@ function CashPage({ state, commit }: { state: AppState; commit: (next: AppState,
     const amount = Number(form.get("amount"));
     const category = String(form.get("category"));
     const expenseDate = String(form.get("date"));
-    const expiryDate = String(form.get("expiryDate"));
-    const expenseProduct = productById(state.products, String(form.get("expenseProductId")));
-    if (requiresStockProduct && !expenseProduct) {
-      window.alert(category === "ค่าวัตถุดิบ" ? "กรุณาเลือกรายการวัตถุดิบ" : "กรุณาเลือกรายการบรรจุภัณฑ์");
+    const branch = form.get("branch") as Branch;
+    if (purchaseQty <= 0) {
+      window.alert("กรุณากรอกจำนวนที่ซื้อ");
       return;
     }
-    if (requiresStockProduct && purchaseQty <= 0) {
-      window.alert(category === "ค่าวัตถุดิบ" ? "กรุณากรอกน้ำหนักกิโลกรัม" : "กรุณากรอกจำนวนที่ซื้อ");
+    if (amount <= 0) {
+      window.alert("กรุณากรอกจำนวนเงิน");
       return;
     }
-    if (requiresStockProduct && !expiryDate) {
-      window.alert("กรุณาเลือกวันหมดอายุ");
-      return;
-    }
-    const cashState = addCashEntry(state, {
+    const next = addCashEntry(state, {
       date: expenseDate,
-      branch: "บ้านโจ้",
+      branch,
       type: "จ่ายเงิน",
       category,
       purchaseQty,
       paymentChannel: form.get("paymentChannel") as PaymentChannel,
-      expenseProductId: expenseProduct?.id,
       amount,
       note: String(form.get("note")),
     });
-    const next = requiresStockProduct && expenseProduct
-      ? receiveLot(cashState, {
-          productId: expenseProduct.id,
-          branch: "บ้านโจ้",
-          quantity: purchaseQty,
-          unitCost: purchaseQty > 0 ? amount / purchaseQty : 0,
-          receivedDate: expenseDate,
-          expiryDate,
-          supplier: "Grand House",
-          note: `${category} ${expenseProduct.name}`,
-          recordCash: false,
-        })
-      : cashState;
     event.currentTarget.reset();
-    setExpenseCategory(expenseCategories[0]);
-    setExpenseProductId("");
-    commit(next, requiresStockProduct ? "บันทึกค่าใช้จ่ายและรับเข้าคลังแล้ว" : "บันทึกค่าใช้จ่ายแล้ว");
+    setExpenseCategory(generalExpenseCategories[0]);
+    commit(next, "บันทึกค่าใช้จ่ายแล้ว");
   }
+
+  function submitStockPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const product = productById(state.products, String(form.get("stockProductId")));
+    const quantity = Number(form.get("purchaseQty"));
+    const amount = Number(form.get("amount"));
+    const purchaseDate = String(form.get("date"));
+    const expiryDate = String(form.get("expiryDate"));
+    const branch = form.get("branch") as Branch;
+    const category = form.get("category") as "ค่าวัตถุดิบ" | "ค่าบรรจุภัณฑ์";
+    if (!product) {
+      window.alert(category === "ค่าวัตถุดิบ" ? "กรุณาเลือกรายการวัตถุดิบ" : "กรุณาเลือกรายการบรรจุภัณฑ์");
+      return;
+    }
+    if (quantity <= 0) {
+      window.alert("กรุณากรอกจำนวนที่ซื้อ");
+      return;
+    }
+    if (amount <= 0) {
+      window.alert("กรุณากรอกจำนวนเงิน");
+      return;
+    }
+    if (!expiryDate) {
+      window.alert("กรุณาเลือกวันหมดอายุ");
+      return;
+    }
+    const cashState = addCashEntry(state, {
+      date: purchaseDate,
+      branch,
+      type: "จ่ายเงิน",
+      category,
+      purchaseQty: quantity,
+      paymentChannel: form.get("paymentChannel") as PaymentChannel,
+      expenseProductId: product.id,
+      amount,
+      note: String(form.get("note")) || product.name,
+    });
+    const next = receiveLot(cashState, {
+      productId: product.id,
+      branch,
+      quantity,
+      unitCost: amount / quantity,
+      receivedDate: purchaseDate,
+      expiryDate,
+      supplier: "Grand House",
+      note: `${category} ${product.name}`,
+      recordCash: false,
+    });
+    event.currentTarget.reset();
+    setStockProductId("");
+    commit(next, "บันทึกซื้อเข้าคลังแล้ว");
+  }
+
   return (
     <section className="stack">
-      <Panel title="บันทึกค่าใช้จ่าย" icon={WalletCards}>
-        <form className="clean-form expense-form" onSubmit={submit}>
-          <Input name="date" label="วันที่" type="date" defaultValue={today} />
-          <Select
-            name="category"
-            label="ประเภท"
-            value={expenseCategory}
-            onChange={(event) => {
-              setExpenseCategory(event.target.value);
-              setExpenseProductId("");
-            }}
-            options={expenseCategories.map((category) => [category, category])}
-          />
-          {requiresStockProduct && (
+      <div className="filter-row master-data-tabs">
+        <button className={expenseTab === "general" ? "chip active" : "chip"} onClick={() => setExpenseTab("general")}>
+          <WalletCards size={16} /> ค่าใช้จ่ายทั่วไป
+        </button>
+        <button className={expenseTab === "stockPurchases" ? "chip active" : "chip"} onClick={() => setExpenseTab("stockPurchases")}>
+          <Boxes size={16} /> ซื้อเข้าคลัง
+        </button>
+      </div>
+      {expenseTab === "general" && (
+        <Panel title="บันทึกค่าใช้จ่ายทั่วไป" icon={WalletCards}>
+          <form className="clean-form expense-form" onSubmit={submit}>
+            <Input name="date" label="วันที่" type="date" defaultValue={today} />
+            <Select name="branch" label="สาขา" value={expenseBranch} onChange={(event) => setExpenseBranch(event.target.value as Branch)} options={branches.map((branch) => [branch, branch])} />
             <Select
-              name="expenseProductId"
-              label={expenseCategory === "ค่าวัตถุดิบ" ? "รายการวัตถุดิบ" : "รายการบรรจุภัณฑ์"}
-              value={expenseProductId}
-              onChange={(event) => setExpenseProductId(event.target.value)}
-              options={[["", "เลือกรายการ"], ...stockExpenseProducts.map((product) => [product.id, product.name] as [string, string])]}
+              name="category"
+              label="ประเภท"
+              value={expenseCategory}
+              onChange={(event) => setExpenseCategory(event.target.value)}
+              options={generalExpenseCategories.map((category) => [category, category])}
             />
-          )}
-          <Input name="purchaseQty" label={purchaseQtyLabel} type="number" step="0.01" defaultValue="1" />
-          {requiresStockProduct && <Input name="expiryDate" label="วันหมดอายุ" type="date" defaultValue={today} />}
-          <Select name="paymentChannel" label="การจ่ายเงิน" options={expensePaymentChannels.map((channel) => [channel, channel])} />
-          <Input name="amount" label="จำนวนเงิน" type="number" step="0.01" defaultValue="0" />
-          <Input name="note" label="อื่นๆ" placeholder="พิมพ์โน้ตเพิ่มเติม" />
-          <button className="primary action" type="submit">
-            <Save size={18} /> บันทึกค่าใช้จ่าย
-          </button>
-        </form>
-      </Panel>
-      <Panel title="รายการค่าใช้จ่ายล่าสุด" icon={Landmark}>
+            <Input name="purchaseQty" label={purchaseQtyLabel} type="number" step="0.01" defaultValue="1" />
+            <Select name="paymentChannel" label="การจ่ายเงิน" options={expensePaymentChannels.map((channel) => [channel, channel])} />
+            <Input name="amount" label="จำนวนเงิน" type="number" step="0.01" defaultValue="0" />
+            <Input name="note" label="อื่นๆ" placeholder="พิมพ์โน้ตเพิ่มเติม" />
+            <button className="primary action" type="submit">
+              <Save size={18} /> บันทึกค่าใช้จ่าย
+            </button>
+          </form>
+        </Panel>
+      )}
+      {expenseTab === "stockPurchases" && (
+        <Panel title="บันทึกซื้อของเข้าคลัง" icon={Boxes}>
+          <form className="clean-form expense-form" onSubmit={submitStockPurchase}>
+            <Input name="date" label="วันที่ซื้อ" type="date" defaultValue={today} />
+            <Select name="branch" label="สาขา" value={stockBranch} onChange={(event) => setStockBranch(event.target.value as Branch)} options={branches.map((branch) => [branch, branch])} />
+            <Select
+              name="category"
+              label="ประเภท"
+              value={stockCategory}
+              onChange={(event) => {
+                setStockCategory(event.target.value as "ค่าวัตถุดิบ" | "ค่าบรรจุภัณฑ์");
+                setStockProductId("");
+              }}
+              options={stockExpenseCategories.map((category) => [category, category])}
+            />
+            <Select
+              name="stockProductId"
+              label={stockCategory === "ค่าวัตถุดิบ" ? "รายการวัตถุดิบ" : "รายการบรรจุภัณฑ์"}
+              value={stockProductId}
+              onChange={(event) => setStockProductId(event.target.value)}
+              options={[["", "เลือกรายการ"], ...stockProductOptions.map((product) => [product.id, product.name] as [string, string])]}
+            />
+            <Input name="purchaseQty" label={stockQtyLabel} type="number" step="0.01" defaultValue="1" />
+            <Input name="expiryDate" label="วันหมดอายุ" type="date" defaultValue={today} />
+            <Select name="paymentChannel" label="การจ่ายเงิน" options={expensePaymentChannels.map((channel) => [channel, channel])} />
+            <Input name="amount" label="จำนวนเงินรวม" type="number" step="0.01" defaultValue="0" />
+            <Input name="note" label="อื่นๆ" placeholder="เช่น ราคาใหม่ / ซื้อด่วน / เลขบิล" />
+            <button className="primary action" type="submit">
+              <Save size={18} /> บันทึกซื้อเข้าคลัง
+            </button>
+          </form>
+        </Panel>
+      )}
+      <Panel title={expenseTab === "stockPurchases" ? "ประวัติซื้อเข้าคลังล่าสุด" : "รายการค่าใช้จ่ายทั่วไปล่าสุด"} icon={Landmark}>
+        <div className="filter-row">
+          <span style={{ color: "var(--muted)", fontSize: 13, fontWeight: 700, alignSelf: "center" }}>สาขา:</span>
+          {(["all", ...branches] as const).map((branch) => (
+            <button key={branch} className={expenseListBranch === branch ? "chip active" : "chip"} onClick={() => setExpenseListBranch(branch)}>
+              {branch === "all" ? "ทุกสาขา" : branch}
+            </button>
+          ))}
+        </div>
         <SimpleTable
-          headers={["วันที่", "ประเภท", "รายการ", "จำนวนที่ซื้อ", "การจ่ายเงิน", "จำนวนเงิน", "อื่นๆ"]}
-          rows={state.cashEntries
-            .filter((entry) => entry.type === "จ่ายเงิน")
-            .slice(-12)
-            .reverse()
-            .map((entry) => [entry.date, entry.category, productById(state.products, entry.expenseProductId || "")?.name || "-", entry.purchaseQty ?? "-", entry.paymentChannel || "-", money(entry.amount), entry.note || "-"])}
+          headers={["วันที่", "สาขา", "ประเภท", "รายการ", "จำนวนที่ซื้อ", "การจ่ายเงิน", "จำนวนเงิน", "อื่นๆ"]}
+          rows={visibleExpenseEntries.map((entry) => [entry.date, entry.branch, entry.category, productById(state.products, entry.expenseProductId || "")?.name || "-", entry.purchaseQty ?? "-", entry.paymentChannel || "-", money(entry.amount), entry.note || "-"])}
         />
       </Panel>
     </section>
