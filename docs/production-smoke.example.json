@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "date": "2026-06-12",
+  "web_app_url": "https://script.google.com/macros/s/PRODUCTION_DEPLOYMENT_ID/exec",
+  "owner_login": true,
+  "staff_login": true,
+  "sale_created": true,
+  "sale_voided": true,
+  "wastage_created": true,
+  "reconcile_completed": true,
+  "dashboard_checked": true,
+  "run_all_tests_passed": true,
+  "owner_approved": true,
+  "notes": "Dry-run shape only. Copy to production-smoke.json after production deploy and fill real smoke-test evidence."
+}

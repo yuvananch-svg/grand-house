@@ -1,0 +1,10 @@
+ENV=prod
+SPREADSHEET_ID=<production-sheet-id>
+PEPPER=<new-random-secret-not-used-in-staging>
+ALERT_EMAIL=<owner-alert-email>
+SEED_OWNER_PASSWORD=<new-production-password>
+SEED_OWNER_PIN=<new-6-to-12-digit-pin>
+SEED_OFFICE_PASSWORD=<new-production-password>
+SEED_KASET_PASSWORD=<new-production-password>
+SEED_THARUA_PASSWORD=<new-production-password>
+SEED_BANJO_PASSWORD=<new-production-password>

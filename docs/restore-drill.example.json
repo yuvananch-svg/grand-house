@@ -1,0 +1,10 @@
+{
+  "completed": true,
+  "date": "2026-06-12",
+  "backup_spreadsheet_id": "<backup-spreadsheet-id>",
+  "restored_spreadsheet_id": "<restored-spreadsheet-id>",
+  "owner_approved": true,
+  "smoke_passed": true,
+  "outbox_checked": true,
+  "notes": "Dry-run evidence only. Copy to restore-drill.json and fill real IDs after the restore drill."
+}
