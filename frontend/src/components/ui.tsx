@@ -59,11 +59,11 @@ function Numpad({ title, initial, allowDecimal = true, onConfirm, onClose }: { t
 export function NumpadInput({ label, value, onChange, allowDecimal = true, placeholder }: { label: string; value: string; onChange: (value: string) => void; allowDecimal?: boolean; placeholder?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <label className="numpad-field">
+    <div className="numpad-field">
       <span>{label}</span>
       <button type="button" className="numpad-trigger" onClick={() => setOpen(true)}>{value || placeholder || "แตะเพื่อกรอก"}</button>
       {open && <Numpad title={label} initial={value} allowDecimal={allowDecimal} onConfirm={onChange} onClose={() => setOpen(false)} />}
-    </label>
+    </div>
   );
 }
 
