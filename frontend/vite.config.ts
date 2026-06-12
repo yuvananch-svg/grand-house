@@ -29,7 +29,7 @@ export default defineConfig({
         name: "Grand's House Local",
         short_name: "Grand's House",
         description: "Local-first operations app for Grand's House",
-        theme_color: "#0f766e",
+        theme_color: "#002F49",
         background_color: "#f8fafc",
         display: "standalone",
         start_url: base,
