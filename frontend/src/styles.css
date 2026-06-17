@@ -44,6 +44,11 @@ button:disabled {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 180ms ease;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -58,7 +63,13 @@ button:disabled {
   gap: 18px;
 }
 
-.brand-block,
+.brand-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
 .login-brand {
   display: flex;
   align-items: center;
@@ -93,6 +104,56 @@ button:disabled {
   margin: 2px 0 0;
   color: #8fb4c8;
   font-size: 13px;
+}
+
+.sidebar-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.sidebar-collapsed .sidebar {
+  padding: 12px 8px;
+  gap: 12px;
+}
+
+.sidebar-collapsed .brand-block {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 8px;
+}
+
+.sidebar-collapsed .brand-block > div:not(.brand-mark),
+.sidebar-collapsed .session-card,
+.sidebar-collapsed .nav-list button span,
+.sidebar-collapsed .sidebar-actions button {
+  font-size: 0;
+  gap: 0;
+}
+
+.sidebar-collapsed .brand-mark {
+  width: 46px;
+  height: 46px;
+}
+
+.sidebar-collapsed .nav-list button,
+.sidebar-collapsed .sidebar-actions button {
+  justify-content: center;
+  min-height: 52px;
+  padding: 10px;
+}
+
+.sidebar-collapsed .nav-list button svg,
+.sidebar-collapsed .sidebar-actions button svg {
+  flex: 0 0 auto;
 }
 
 .session-card {
@@ -625,6 +686,82 @@ select {
   background: #C1121F;
 }
 
+.cash-change-inline,
+.cash-shortfall {
+  width: 100%;
+  min-height: 58px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.cash-change-inline {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.cash-shortfall {
+  color: #780001;
+  background: #fee2e2;
+  display: grid;
+  place-items: center;
+}
+
+.cash-change-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  padding: 24px;
+  background: rgba(0, 47, 73, 0.48);
+  display: grid;
+  place-items: center;
+}
+
+.cash-change-card {
+  width: min(520px, 100%);
+  padding: 24px;
+  border: 1px solid #e8ddd0;
+  border-radius: var(--radius-md);
+  color: #002F49;
+  background: white;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.24);
+  display: grid;
+  gap: 14px;
+}
+
+.cash-change-card > span {
+  color: #64747e;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.cash-change-amount {
+  color: #065f46;
+  font-size: clamp(44px, 7vw, 76px);
+  line-height: 1;
+}
+
+.cash-change-card p {
+  margin: 0;
+  color: #2c4a5a;
+  font-weight: 800;
+}
+
+.cash-change-card .button-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+}
+
+.cash-change-card .button-row button {
+  min-height: 56px;
+  justify-content: center;
+  text-align: center;
+  font-weight: 900;
+}
+
 .metric {
   padding: 18px;
   border-radius: 8px;
@@ -925,6 +1062,23 @@ th {
 
   .checkout-box > strong {
     font-size: 20px;
+  }
+
+  .cash-change-popup {
+    align-items: end;
+    padding: 14px 14px calc(90px + env(safe-area-inset-bottom));
+  }
+
+  .cash-change-card {
+    padding: 18px;
+  }
+
+  .cash-change-amount {
+    font-size: 46px;
+  }
+
+  .cash-change-card .button-row {
+    grid-template-columns: 1fr;
   }
 
   .recipe-row {

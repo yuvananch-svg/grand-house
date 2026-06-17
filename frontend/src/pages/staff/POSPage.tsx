@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildSaleDraftFromCart } from "../../api/localAdapter";
 import { ProductVisual } from "../../components/ProductVisual";
 import { NumpadInput } from "../../components/ui";
@@ -50,6 +50,7 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
   const [ownerBranch, setOwnerBranch] = useState<BranchId>("BR-KASET");
   const [category, setCategory] = useState<PosCategory>("all");
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [cashChangePopupOpen, setCashChangePopupOpen] = useState(false);
   const branch_id = session.branch_id === "ALL" ? ownerBranch : session.branch_id;
   const allProducts = state.products.filter((product) => product.active);
   const products = allProducts.filter((product) => productMatchesPosCategory(product, category));
@@ -58,8 +59,16 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
   const total = isWastageMode ? 0 : cart.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
   const cashReceived = bahtToSatang(cashBaht);
   const cashValid = payment !== "CASH" || cashReceived >= total;
+  const cashChange = Math.max(0, cashReceived - total);
+  const cashShortfall = payment === "CASH" ? Math.max(0, total - cashReceived) : 0;
   const canFinish = cart.length > 0 && (isWastageMode || (cashValid && (saleType !== "freebie" || cart.some((item) => !item.is_freebie))));
   const isMobileCartOpen = mobileCartOpen && cart.length > 0;
+
+  useEffect(() => {
+    if (payment !== "CASH" || isWastageMode || !cart.length || !cashValid) {
+      setCashChangePopupOpen(false);
+    }
+  }, [cart.length, cashValid, isWastageMode, payment]);
 
   function addProduct(product: Product) {
     const isGift = saleType === "freebie" && freebieMode === "gift";
@@ -69,28 +78,44 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
     if (found) found.qty += 1;
     else next.push({ product_id: product.id, qty: 1, unit_price: isGift ? 0 : basePrice, is_freebie: isGift });
     setCart(isWastageMode ? next : repriceFreebie(next, allProducts, saleType as SaleType, freebieTarget));
+    setCashChangePopupOpen(false);
     setMobileCartOpen(true);
   }
 
   function updateQty(index: number, qty: number) {
     const next = cart.map((item, current) => (current === index ? { ...item, qty: Math.max(1, qty) } : item));
     setCart(isWastageMode ? next : repriceFreebie(next, allProducts, saleType as SaleType, freebieTarget));
+    setCashChangePopupOpen(false);
   }
 
   function updateDiscountPrice(index: number, value: string) {
     const unit_price = Math.max(0, bahtToSatang(value));
     setCart(cart.map((item, current) => (current === index ? { ...item, unit_price } : item)));
+    setCashChangePopupOpen(false);
   }
 
   function removeItem(index: number) {
     const next = cart.filter((_, current) => current !== index);
     setCart(isWastageMode ? next : repriceFreebie(next, allProducts, saleType as SaleType, freebieTarget));
+    setCashChangePopupOpen(false);
   }
 
   function updateFreebieTotal(value: string) {
     setFreebieTotalBaht(value);
     const target = value.trim() ? Math.max(0, bahtToSatang(value)) : undefined;
     setCart(repriceFreebie(cart, allProducts, saleType as SaleType, target));
+    setCashChangePopupOpen(false);
+  }
+
+  function updatePayment(method: PaymentMethod) {
+    setPayment(method);
+    if (method !== "CASH") setCashChangePopupOpen(false);
+  }
+
+  function updateCash(value: string) {
+    setCashBaht(value);
+    const received = bahtToSatang(value);
+    setCashChangePopupOpen(cart.length > 0 && total > 0 && received >= total);
   }
 
   async function finishWastage() {
@@ -124,6 +149,7 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
     await flushOutbox(session);
     setCart([]);
     setMobileCartOpen(false);
+    setCashChangePopupOpen(false);
     setCashBaht("");
     notify(navigator.onLine ? "บันทึกบิลแล้ว" : "บันทึกลงเครื่องแล้ว รอส่ง");
     await refresh();
@@ -145,6 +171,7 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
             setSaleType(item.type);
             setCart([]);
             setFreebieTotalBaht("");
+            setCashChangePopupOpen(false);
           }}>
             {t(language, item.labelKey)}
           </button>
@@ -227,13 +254,19 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
                   <strong>{t(language, "total")} {formatMoney(total)} บาท</strong>
                   <div className="payment-grid">
                     {paymentMethods.map((method) => (
-                      <button key={method} className={payment === method ? "active" : ""} onClick={() => setPayment(method)}>{paymentLabel(method)}</button>
+                      <button key={method} className={payment === method ? "active" : ""} onClick={() => updatePayment(method)}>{paymentLabel(method)}</button>
                     ))}
                   </div>
                   {payment === "CASH" && (
                     <>
-                      <NumpadInput label="เงินสดรับมา (บาท)" value={cashBaht} onChange={setCashBaht} placeholder="แตะเพื่อกรอกเงินรับ" />
-                      <b className={cashValid ? "good-text" : "danger-text"}>ทอน {formatMoney(Math.max(0, cashReceived - total))} บาท</b>
+                      <NumpadInput label="เงินสดรับมา (บาท)" value={cashBaht} onChange={updateCash} placeholder="แตะเพื่อกรอกเงินรับ" />
+                      {cashShortfall > 0 ? (
+                        <div className="cash-shortfall">เงินสดยังขาด {formatMoney(cashShortfall)} บาท</div>
+                      ) : (
+                        <button className="cash-change-inline" type="button" onClick={() => setCashChangePopupOpen(cashValid && cart.length > 0)}>
+                          ทอน {formatMoney(cashChange)} บาท
+                        </button>
+                      )}
                     </>
                   )}
                 </>
@@ -243,6 +276,19 @@ export function POSPage({ state, session, language, refresh, notify }: POSPagePr
           </div>
         </aside>
       </div>
+      {cashChangePopupOpen && payment === "CASH" && !isWastageMode && (
+        <div className="cash-change-popup" role="dialog" aria-modal="true" aria-labelledby="cash-change-title">
+          <div className="cash-change-card">
+            <span id="cash-change-title">เงินทอน</span>
+            <strong className="cash-change-amount">{formatMoney(cashChange)} บาท</strong>
+            <p>รับเงินสด {formatMoney(cashReceived)} บาท จากยอด {formatMoney(total)} บาท</p>
+            <div className="button-row">
+              <button className="ghost" type="button" onClick={() => setCashChangePopupOpen(false)}>แก้ไขเงินรับ</button>
+              <button className="primary" type="button" onClick={finishSale}>{t(language, "finishSale")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

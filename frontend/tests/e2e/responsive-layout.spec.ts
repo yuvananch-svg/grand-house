@@ -8,10 +8,31 @@ async function loginAsOwner(page: Page) {
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 }
 
+async function firstAppShellColumn(page: Page): Promise<number> {
+  return page.locator(".app-shell").evaluate((element) => {
+    const first = getComputedStyle(element).gridTemplateColumns.split(" ")[0];
+    return Math.round(Number.parseFloat(first));
+  });
+}
+
 test.beforeEach(async ({ context, page }) => {
   await context.clearCookies();
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
+});
+
+test("R0 desktop sidebar starts collapsed and can expand", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await loginAsOwner(page);
+
+  await expect.poll(async () => firstAppShellColumn(page)).toBe(72);
+  await expect(page.locator(".app-shell")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".nav-list button span").first()).toHaveCSS("font-size", "0px");
+
+  await page.getByRole("button", { name: "ขยายเมนูด้านซ้าย" }).click();
+  await expect.poll(async () => firstAppShellColumn(page)).toBe(280);
+  await expect(page.locator(".app-shell")).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".nav-list button span").first()).not.toHaveCSS("font-size", "0px");
 });
 
 test("R1 mobile POS uses bottom nav, two-column products, and an expandable cart sheet", async ({ page }) => {
@@ -96,4 +117,45 @@ test("R4 mobile More sheet exposes secondary pages and session actions", async (
   await expect(page.getByRole("heading", { name: "งบการเงิน", exact: true })).toBeVisible();
   await expect(page.locator(".mobile-menu-sheet")).toHaveCount(0);
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test("R5 cash checkout shows change popup and completes sale", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await loginAsOwner(page);
+
+  await page.getByRole("button", { name: "ขายหน้าร้าน" }).click();
+  await page.locator(".product-card").first().click();
+  await page.getByRole("button", { name: "เงินสด" }).click();
+  await page.locator(".numpad-trigger").filter({ hasText: "แตะเพื่อกรอกเงินรับ" }).click();
+  await page.locator(".numpad").getByRole("button", { name: "1" }).click();
+  await page.locator(".numpad").getByRole("button", { name: "0" }).click();
+  await page.locator(".numpad").getByRole("button", { name: "0" }).click();
+  await page.getByRole("button", { name: "ตกลง" }).click();
+
+  const popup = page.getByRole("dialog", { name: "เงินทอน" });
+  await expect(popup).toBeVisible();
+  await expect(popup.locator(".cash-change-amount")).toContainText("55.00 บาท");
+
+  await popup.getByRole("button", { name: "จบการขาย" }).click();
+  await expect(popup).toHaveCount(0);
+  await expect(page.locator(".cart-row")).toHaveCount(0);
+  await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth)).toBe(1366);
+});
+
+test("R6 cash shortfall is prominent and does not open change popup", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await loginAsOwner(page);
+
+  await page.getByRole("button", { name: "ขายหน้าร้าน" }).click();
+  await page.locator(".product-card").first().click();
+  await page.getByRole("button", { name: "เงินสด" }).click();
+  await page.locator(".numpad-trigger").filter({ hasText: "แตะเพื่อกรอกเงินรับ" }).click();
+  await page.locator(".numpad").getByRole("button", { name: "1" }).click();
+  await page.locator(".numpad").getByRole("button", { name: "0" }).click();
+  await page.getByRole("button", { name: "ตกลง" }).click();
+
+  await expect(page.locator(".cash-shortfall")).toContainText("เงินสดยังขาด 35.00 บาท");
+  await expect(page.getByRole("dialog", { name: "เงินทอน" })).toHaveCount(0);
+  await expect(page.locator(".checkout-box .giant")).toBeDisabled();
+  await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth)).toBe(1366);
 });

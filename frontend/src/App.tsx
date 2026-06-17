@@ -14,9 +14,9 @@ import {
   LogOut,
   MoreHorizontal,
   PackagePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
   ReceiptText,
-  RotateCcw,
-  Save,
   ShieldAlert,
   Trash2,
   UserCog,
@@ -29,7 +29,7 @@ import { type IconComponent } from "./components/ui";
 import { createSeedState } from "./data/seed";
 import { cacheSession, clearCachedSession } from "./db/dexie";
 import { flushOutbox, getOutboxCount } from "./db/syncEngine";
-import { bangkokDateFromIso, branchName } from "./domain/lookups";
+import { branchName } from "./domain/lookups";
 import { t } from "./i18n";
 import { DashboardPage } from "./pages/owner/DashboardPage";
 import { RevenuePage } from "./pages/owner/RevenuePage";
@@ -51,7 +51,6 @@ import { DayClosePage } from "./pages/staff/DayClosePage";
 import { useAuthStore } from "./stores/authStore";
 import { getInitialAppData, loadAppData } from "./stores/dataStore";
 import type {
-  ApiAction,
   Language,
   LocalState,
   Session
@@ -79,6 +78,7 @@ type Page =
 
 const OUTBOX_SYNC_INTERVAL_MS = 15_000;
 const SNAPSHOT_REFRESH_INTERVAL_MS = 180_000;
+const SIDEBAR_COLLAPSED_KEY = "grands-house-sidebar-collapsed";
 
 type ToastState = { message: string; kind: "success" | "error" };
 
@@ -150,6 +150,7 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [outboxCount, setOutboxCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) !== "false");
   const apiMode = getApiMode();
 
   const refresh = async (nextSession: Session | null = session) => {
@@ -263,9 +264,18 @@ export default function App() {
     setSession(null);
     await clearCachedSession();
   };
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+  const sidebarToggleLabel = sidebarCollapsed ? "ขยายเมนูด้านซ้าย" : "ย่อเมนูด้านซ้าย";
+  const SidebarToggleIcon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="brand-block">
           <div className="brand-mark">GH</div>
@@ -273,6 +283,9 @@ export default function App() {
             <h1>Grand's House</h1>
             <p>{apiMode === "gas" ? "Google Sheets sync" : "Local-first operations"}</p>
           </div>
+          <button className="sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarToggleLabel} aria-label={sidebarToggleLabel}>
+            <SidebarToggleIcon size={20} />
+          </button>
         </div>
         <div className="session-card">
           <strong>{session.display_name}</strong>
@@ -430,13 +443,6 @@ function LoginScreen({ language, setLanguage, onLogin }: { language: Language; s
       </section>
     </main>
   );
-}
-
-interface PageProps {
-  state: LocalState;
-  session: Session;
-  refresh: () => Promise<void>;
-  notify: (message: string, kind?: ToastState["kind"]) => void;
 }
 
 function pageTitle(language: Language, page: Page) {
