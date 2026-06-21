@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Grand's House">
+  <rect width="512" height="512" rx="96" fill="#10211f"/>
+  <path d="M128 218 256 114l128 104v170a24 24 0 0 1-24 24h-64v-96h-80v96h-64a24 24 0 0 1-24-24V218Z" fill="#f8fafc"/>
+  <path d="M164 234h184" stroke="#0f766e" stroke-width="30" stroke-linecap="round"/>
+  <text x="256" y="286" fill="#10211f" font-family="Arial, sans-serif" font-size="70" font-weight="800" text-anchor="middle">GH</text>
+</svg>
